@@ -31,6 +31,10 @@ Then run `openspec instructions apply --change replace-fadecandy-with-rust` for 
 | Build | GitHub Actions cross-compiles aarch64; Ansible installs the pinned release and removes Fadecandy/Ruby/cron. |
 | Rollback | Card swap plus Fadecandy reconnect; keep the old SD and board until two weeks of stable operation. |
 
+Hardware note (2026-10-24): the strip in use is WS2812, not WS2811B. Both use the same 800 kHz NZR protocol and the same 0.7 × VDD input threshold at 5 V, so the wiring, SPI encoding, and software are unchanged. The Adafruit BSS138 level shifter is not suitable for the data line: its 10 kΩ pull-ups produce roughly 1–2 µs edges, while a WS2812 bit is 1.25 µs and its high pulses are 0.4/0.8 µs. Use the 74AHCT125 or 74HCT245 from D3.
+
+Host note (2026-10-24): the Raspberry Pi Zero 2 W at `rpizero.local` (now `wordclock-dev`) is suitable for development and staging, and is a production candidate after the SPI/strip test and a 24-hour soak. Keep the 3B and the old SD as the rollback path.
+
 ## Non-negotiables
 
 - Do not change the wording while porting. The golden fixture encodes every current quirk.

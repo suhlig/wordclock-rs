@@ -6,7 +6,7 @@ The word clock has been stable for almost ten years, but its software chain is n
 
 ## What Changes
 
-- Replace `fcserver`, Open Pixel Control, and the `faderuby` client with an in-process Rust daemon that writes the 288-pixel frame directly to the WS2811B strip over SPI.
+- Replace `fcserver`, Open Pixel Control, and the `faderuby` client with an in-process Rust daemon that writes the 288-pixel frame directly to the WS2812 strip over SPI.
 - Port the existing clock logic, XKCD color table, occasion rules, and Fadecandy gamma 2.5 color correction to Rust, preserving the current visible output exactly.
 - Keep a hardware-free terminal simulator and demo loop so clock logic can be developed and tested without a Pi or LEDs.
 - Replace the per-minute cron job with a long-running systemd service that owns the display, resamples the uniform color once per minute, and gates the first render on NTP synchronization.
@@ -22,7 +22,7 @@ The word clock has been stable for almost ten years, but its software chain is n
 
 - `clock-rendering`: turns local time into the exact 18×16 German word pattern, including the current phrasing quirks and pixel indices.
 - `color-pipeline`: selects the uniform or per-pixel color for the current time, applies the current occasion rules, and applies gamma 2.5/whitepoint correction.
-- `led-output`: writes a complete RGB frame to the WS2811B strip over SPI, including physical pixel count, padding, and refresh behavior.
+- `led-output`: writes a complete RGB frame to the WS2812 strip over SPI, including physical pixel count, padding, and refresh behavior.
 - `display-simulator`: renders the same frame to a terminal and runs the demo loop without hardware.
 - `clock-daemon`: runs continuously, schedules minute updates, gates startup on NTP, logs, and shuts down cleanly under systemd.
 - `deployment`: builds and publishes the aarch64 binary and provisions the 64-bit Pi, SPI, service, and configuration reproducibly.

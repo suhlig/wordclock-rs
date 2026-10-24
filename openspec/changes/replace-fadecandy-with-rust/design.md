@@ -63,7 +63,9 @@ Fadecandy currently provides both the USB interface and the 5 V level shifting (
 | Decoupling | 100 nF | across 74AHCT125 VCC/GND |
 | Bulk | 1000 µF, 10 V | across strip 5 V/GND at the first LED |
 
-The 74HCT245 alternative uses DIR = VCC, OE = GND, A1 = GPIO10, B1 = strip DIN through the same resistor, VCC = 5 V, GND = common. Do not power the Pi from the LED supply without a proper protected 5 V path. Keep the data lead short; use a twisted pair with ground if it must be longer. The WS2811B data threshold is about 0.7 × VDD, so 3.3 V is marginal and the level shifter is mandatory.
+The 74HCT245 alternative uses DIR = VCC, OE = GND, A1 = GPIO10, B1 = strip DIN through the same resistor, VCC = 5 V, GND = common. Do not power the Pi from the LED supply without a proper protected 5 V path. Keep the data lead short; use a twisted pair with ground if it must be longer. The WS2812/WS2812B data threshold is about 0.7 × VDD, so 3.3 V is marginal and the level shifter is mandatory.
+
+The strip in use is WS2812, not WS2811B. Both use the same 800 kHz NZR protocol and the same 0.7 × VDD input threshold, so the wiring, SPI encoding, and software are unchanged. Do not substitute the Adafruit BSS138 bidirectional shifter: its 10 kΩ pull-ups produce roughly 1–2 µs edges, which cannot encode the 0.4/0.8 µs WS2812 pulses. Use the 74AHCT125 or 74HCT245.
 
 SPI is preferred over Pi PWM/DMA because it needs no kernel or audio workarounds, is portable to Pi 4 and Pi 5, and keeps the `rpi_ws281x` C dependency out of the project. The trade-off is that an external level shifter is required either way; Fadecandy already supplied one.
 
@@ -80,7 +82,7 @@ BOM additions:
 | Optional logic analyzer | 1 | Verify SPI timing and data integrity |
 | Optional 5 A fuse | 1 | LED supply protection |
 
-The existing 300-LED WS2811B strip, MeanWell 5 V supply, Pi 3B, and Fadecandy board (rollback) are reused.
+The existing 300-LED WS2812 strip, MeanWell 5 V supply, Pi 3B, and Fadecandy board (rollback) are reused.
 
 ### D4: Run as a long-running systemd service
 
@@ -101,7 +103,7 @@ flowchart TD
     Correction --> Display{Display backend}
     Display -->|Pi| Spi[SPI0 /dev/spidev0.0]
     Spi --> Level[74AHCT125 level shifter]
-    Level --> Strip[WS2811B strip]
+    Level --> Strip[WS2812 strip]
     Display -->|dev| Terminal[Terminal simulator]
     Display -->|demo| Demo[Demo loop]
 ```

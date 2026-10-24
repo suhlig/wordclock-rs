@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Delivers a complete color frame to the physical WS2811B strip with the correct pixel count, pixel order, color order, and recovery behavior.
+Delivers a complete color frame to the physical WS2812/WS2812B strip with the correct pixel count, pixel order, color order, and recovery behavior.
 
 ## ADDED Requirements
 
@@ -28,8 +28,8 @@ The system SHALL transmit logical pixel 0 first and SHALL preserve ascending log
 - **WHEN** the test pattern shows that the physical strip is not in logical order
 - **THEN** the configured mapping is applied consistently to every frame and to the test pattern
 
-### Requirement: WS2811B color order
-The system SHALL transmit each pixel in the green-red-blue order required by the WS2811B strip.
+### Requirement: WS2812/WS2812B color order
+The system SHALL transmit each pixel in the green-red-blue order required by the WS2812/WS2812B strip.
 
 #### Scenario: Primary colors
 - **WHEN** the test pattern requests pure red, pure green, and pure blue
