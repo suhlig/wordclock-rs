@@ -217,6 +217,8 @@ File.write("fixtures/minutes.json", JSON.pretty_generate(fixtures))
 
 The Rust test loads the fixture and asserts equality for every minute. Additional tests cover the color occasions with a fake sampler, the gamma vectors, the frame padding, and the simulator's deterministic output. The golden fixture is the authority; do not "fix" a mismatch by changing expectations unless the human explicitly approves a behavior change.
 
+Word separation is geometric, not encoded in `words`. The fixture's `words` field concatenates the lit stripe characters and contains no spaces. On a row, `lookup` skips one cell after each word, so there is always at least one dark cell between words; when a word ends at column 17, the next word starts at column 0 of the next row and the line break is the separator. The only fixture cases where a contiguous lit run crosses a row boundary are `HALB` (indices 140–143) followed by `SIEBEN` (144–149) at 06:20, 06:25, 06:30, 06:35, and 06:40. That run reads `HALBSIEBEN` in `words` but is correct on the 16×18 grid. Preserve this behavior; do not add space characters or space pixels.
+
 ### D11: Gate the first render on NTP
 
 The Pi 3 has no RTC, so a boot before NTP can show 1970 or a stale time. On startup the daemon checks `timedatectl show -p NTPSynchronized --value`; if it is not `yes`, it keeps the strip off or neutral and logs the wait every 30 seconds. Once synchronized, it renders within one refresh interval. This is a deliberate robustness deviation from the legacy cron behavior, approved during planning. The daemon still renders from the local system clock if the network later goes away.
