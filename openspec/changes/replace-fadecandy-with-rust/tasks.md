@@ -32,14 +32,14 @@
 
 ## 4. Hardware spike and wiring verification
 
-- [ ] 4.1 Acquire the 74AHCT125 or 74HCT245, 470 Ω resistor, 100 nF ceramic, 1000 µF 10 V electrolytic, wiring, and a new 32 GB or larger microSD card.
+- [ ] 4.1 Acquire the SN74AHCT125N (DIL-14), a 14-pin IC socket, a 470 Ω resistor, a 47 nF ceramic, a 1000 µF 16 V electrolytic, a 5×7 cm perfboard, Dupont leads and a 1×40 header, a Raspberry Pi Pico H for the sigrok-pico analyzer, and a new 32 GB or larger microSD card, in the single BerryBase order listed in `design.md`.
 - [ ] 4.2 Flash a new SD card with Raspberry Pi OS Lite 64-bit (trixie); set hostname `wordclock`, user `suhlig`, SSH key, timezone Europe/Berlin, and German keyboard.
 - [ ] 4.3 Boot the new SD, enable SPI with `dtparam=spi=on`, reboot, and verify `/dev/spidev0.0` and the `spi`, `gpio`, and `i2c` groups.
 - [ ] 4.4 Wire the level shifter exactly as in `design.md`: GPIO10 to 1A, 1Y through 470 Ω to strip DIN, 1OE to GND, VCC to LED 5 V, common ground, decoupling and bulk capacitors.
 - [ ] 4.5 Build and run a minimal SPI blink program on the real strip before writing the full daemon; confirm pure red, green, blue, white, and a full-strip wipe.
 - [ ] 4.6 Implement `wordclock test-pattern` with walking-pixel, row-color, primary-color, and all-on modes; use it to identify the physical order, orientation, and whether the extra 12 LEDs are connected.
 - [ ] 4.7 Record the verified mapping in the configuration and hardware guide; keep identity as the default only if the test pattern proves it.
-- [ ] 4.8 Measure frame time at 2.4 MHz and 3 MHz and record the result; keep the fastest reliable clock.
+- [ ] 4.8 Measure frame time at 2.4 MHz and 3 MHz and record the result; capture GPIO10 with the sigrok-pico analyzer to record the measured frame time and the 0.4/0.8 µs pulse widths, and keep the fastest reliable clock.
 - [ ] 4.9 If SPI is unreliable, try a lower clock or another SPI mode, then document the fallback to an RP2040/ESP32 controller before considering Pi PWM/DMA.
 
 ## 5. Daemon
@@ -85,7 +85,7 @@
 ## 9. Documentation and follow-up
 
 - [ ] 9.1 Write the new repo README with build, simulator, configuration, deployment, and troubleshooting instructions.
-- [ ] 9.2 Write the hardware guide with the wiring diagram, BOM, SPI enablement, test-pattern procedure, and power/ground notes.
+- [x] 9.2 Write the hardware guide with the wiring diagram, BOM, SPI enablement, test-pattern procedure, and power/ground notes.
 - [ ] 9.3 Link the new repo to the legacy repo and the Fadecandy handoff; state that the legacy repo is the behavioral oracle.
 - [ ] 9.4 Record the verified physical mapping and pixel counts in the hardware guide.
 - [ ] 9.5 Create separate OpenSpec proposals for the deferred Reminders ideas, starting with the highest-value ones: smooth fade, night dimming, web/Prometheus/MQTT observability, and sensors.

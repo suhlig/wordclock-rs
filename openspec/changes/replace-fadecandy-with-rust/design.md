@@ -52,7 +52,7 @@ The Pi 3B is sufficient: the clock logic is trivial, the SPI write is about 9 ms
 
 ### D3: Drive the strip from SPI0 with an external level shifter
 
-Fadecandy currently provides both the USB interface and the 5 V level shifting (SN74HCT245 on the Fadecandy board). The replacement uses the Pi's SPI0 MOSI on GPIO10 (physical pin 19), a 74AHCT125 (or 74HCT245) level shifter powered from the LED 5 V supply, a 330–470 Ω series resistor at the first LED, and a common ground between the Pi, the level shifter, and the LED supply.
+Fadecandy currently provides both the USB interface and the 5 V level shifting (SN74HCT245 on the Fadecandy board). The replacement uses the Pi's SPI0 MOSI on GPIO10 (physical pin 19), an SN74AHCT125N in DIL-14 powered from the LED 5 V supply, a 470 Ω series resistor at the first LED, and a common ground between the Pi, the level shifter, and the LED supply.
 
 | Connection | Pi / part | Strip / supply |
 | :--- | :--- | :--- |
@@ -61,10 +61,12 @@ Fadecandy currently provides both the USB interface and the 5 V level shifting (
 | Output enable | 74AHCT125 pin 1 (1OE) | GND |
 | Logic supply | 74AHCT125 pin 14 (VCC) | LED 5 V |
 | Ground | 74AHCT125 pin 7 (GND) | common ground |
-| Decoupling | 100 nF | across 74AHCT125 VCC/GND |
-| Bulk | 1000 µF, 10 V | across strip 5 V/GND at the first LED |
+| Decoupling | 47 nF (100 nF nominal) | across 74AHCT125 VCC/GND |
+| Bulk | 1000 µF, 16 V (10 V minimum) | across strip 5 V/GND at the first LED |
+| Unused inputs | 74AHCT125 pins 5, 9, 12 (2A, 3A, 4A) | GND |
+| Unused enables | 74AHCT125 pins 4, 10, 13 (2OE, 3OE, 4OE) | GND |
 
-The 74HCT245 alternative uses DIR = VCC, OE = GND, A1 = GPIO10, B1 = strip DIN through the same resistor, VCC = 5 V, GND = common. Do not power the Pi from the LED supply without a proper protected 5 V path. Keep the data lead short; use a twisted pair with ground if it must be longer. The WS2812/WS2812B data threshold is about 0.7 × VDD, so 3.3 V is marginal and the level shifter is mandatory.
+The 74HCT245 alternative uses DIR = VCC, OE = GND, A1 = GPIO10, B1 = strip DIN through the same resistor, VCC = 5 V, GND = common; it is only worth using if a source for the AHCT125 cannot be found, because it needs more wiring for the same one data line. Tie the inputs of the three unused gates to GND and their enables low rather than leaving any CMOS input floating. Do not power the Pi from the LED supply without a proper protected 5 V path. Keep the data lead short; use a twisted pair with ground if it must be longer. The WS2812/WS2812B data threshold is about 0.7 × VDD, so 3.3 V is marginal and the level shifter is mandatory.
 
 The strip in use is WS2812, not WS2811B. Both use the same 800 kHz NZR protocol and the same 0.7 × VDD input threshold, so the wiring, SPI encoding, and software are unchanged. Do not substitute the Adafruit BSS138 bidirectional shifter: its 10 kΩ pull-ups produce roughly 1–2 µs edges, which cannot encode the 0.4/0.8 µs WS2812 pulses. Use the 74AHCT125 or 74HCT245.
 
@@ -74,14 +76,42 @@ BOM additions:
 
 | Part | Quantity | Purpose |
 | :--- | ---: | :--- |
-| 74AHCT125 (or 74HCT245) | 1 | 3.3 V to 5 V data level shift |
-| 470 Ω resistor | 1 | Series termination at first LED |
-| 100 nF ceramic capacitor | 1 | Level-shifter decoupling |
-| 1000 µF 10 V electrolytic | 1 | Strip input bulk capacitance |
-| Dupont wires / header / perfboard | as needed | Wiring |
-| 32 GB or larger microSD | 1 | New 64-bit OS, old card retained |
-| Optional logic analyzer | 1 | Verify SPI timing and data integrity |
-| Optional 5 A fuse | 1 | LED supply protection |
+| SN74AHCT125N, DIL-14 | 2 | 3.3 V to 5 V data level shift, one spare |
+| IC socket, 14-pin, THT | 1 | Swap the buffer without desoldering |
+| 470 Ω, 1/4 W, 1 % | 5 | Series termination at the first LED |
+| 47 nF, 50 V ceramic, THT 2.54 mm | 5 | Level-shifter decoupling |
+| 1000 µF, 16 V radial, 105 °C | 2 | Strip input bulk capacitance |
+| Perfboard, 5×7 cm | 1 | Level-shifter carrier |
+| 40-pin Dupont M-F leads and 1×40 header | 1 each | Pi header to carrier, data lead |
+| microSD, 32 GB or larger | 1 | New 64-bit OS, old card retained |
+| Raspberry Pi Pico H (RP2040, headers), sigrok-pico firmware | 1 | Logic analyzer for SPI timing and data integrity |
+| Optional 5×20 mm fuse holder and 5 A fuse | 1 | LED supply protection |
+
+### Sourcing
+
+Stock and prices were verified on 2026-10-24. Every part except the 74HCT245 fallback comes from a single BerryBase order.
+
+| Item | SKU | Price |
+| :--- | :--- | ---: |
+| SN74AHCT125N, DIL-14 | `SN74AHCT125N` | €0.54 |
+| IC socket 14-pin | `ICS-14` | €0.96 |
+| 470 Ω 1/4 W | `MSW470R.25` | €0.05 |
+| 47 nF 50 V ceramic | `KEK47N50VCC` | €0.05 |
+| 1000 µF 16 V | `ELK1M16VAWH` | €0.29 |
+| Perfboard 5×7 cm | `PBS-5X7` | €0.30 |
+| Dupont 40-pin M-F leads | `DUPONT-FM` | €1.60 |
+| Pin header 1×40 | `PINH-1X40P` | €0.50 |
+| SanDisk High Endurance 32 GB microSD | `619659173067` | €26.90 |
+| Fuse holder 5×20 mm | `SIH-32A2A` | €1.40 |
+| Raspberry Pi Pico H, RP2040, headers | `RPI-PICO-H` | €5.50 |
+
+BerryBase ships DHL inside Germany for €4.95 and waives shipping from €200; there is no minimum order value. The electronics without the SD card and the fuse holder total about €11. Supplier availability decides the chip: BerryBase lists the SN74AHCT125N but no 74HCT245, Reichelt lists the 74HCT245 in DIP-20 (€1.15) but no 74AHCT125 at all, and Pollin lists neither. Splitting the order would cost more in shipping than the difference between the parts, so the single-shop BOM uses the AHCT125, which also needs the least wiring for one data line. The 100 nF decoupling value was not in stock at BerryBase; 47 nF is a drop-in for a gate switching at 800 kHz to 3 MHz, and Reichelt's `KERKO 100N` is the fallback if the nominal value is required.
+
+### Diagnostics
+
+The logic analyzer is a Raspberry Pi Pico H running the `sigrok-pico` firmware, which was merged into mainline sigrok in 2023. Flash `pico_sdk_sigrok/release/pico_baseline.uf2` by holding BOOTSEL while connecting USB, then select the `raspberrypi-pico` driver in PulseView over the board's CDC serial port. PulseView 0.4.2 and sigrok-cli 0.7.2 do not support the driver; install a newer build. The firmware caps digital capture at 120 Msps, limited by the 120 MHz PIO clock, and switches to USB streaming for deep captures, so neither the RP2040 nor the newer RP2350 is a bottleneck for an 800 kHz WS2812 stream. libsigrokdecode's `rgb_led_ws281x` decoder is available for the capture.
+
+RP2040 and RP2350 GPIO are 3.3 V only and not 5 V tolerant. Clip to GPIO10 or the buffer input on pin 2 (1A). Never connect the shifted 5 V signal at pin 3 (1Y) or at strip DIN directly to a Pico pin; use a 10 kΩ/10 kΩ divider if the 5 V side must be observed.
 
 The existing 300-LED WS2812 strip, MeanWell 5 V supply, and Pi 3B are reused. The Fadecandy board is not part of the target hardware: it stays connected only as the rollback path until the new SPI output has passed the rollback drill and two weeks of stable operation, then it is removed and retired.
 

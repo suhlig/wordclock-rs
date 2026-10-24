@@ -8,6 +8,8 @@ Start with [HANDOFF.md](HANDOFF.md), then read the proposal, design, specs, and 
 
 The target is a single aarch64 Linux binary that drives 288 WS2812 pixels over SPI0 on a 64-bit Raspberry Pi 3B, preserving the legacy clock's visible behavior exactly. The legacy Ruby implementation remains the behavioral oracle until the port is proven.
 
+The physical build is documented in [docs/hardware.md](docs/hardware.md): bill of materials, wiring, SPI enablement, test patterns, power and grounding, and the rollback procedure.
+
 ## Validate the plan
 
 ```bash
