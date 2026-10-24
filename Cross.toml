@@ -1,0 +1,7 @@
+[build]
+# The Pi release is cross-compiled with:
+#   cross build --release --target aarch64-unknown-linux-gnu --features hardware
+
+[target.aarch64-unknown-linux-gnu]
+# Use cross's default image for this target. Keep this table so per-target
+# overrides (for example a pinned image) have an obvious home.

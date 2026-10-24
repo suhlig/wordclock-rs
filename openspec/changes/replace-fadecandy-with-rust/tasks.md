@@ -2,16 +2,16 @@
 
 ## 1. Repository and baseline
 
-- [ ] 1.1 Create the public `github.com/suhlig/wordclock-rs` repository with MIT OR Apache-2.0 licensing, README, `.gitignore`, and a Rust workspace.
-- [ ] 1.2 Copy this OpenSpec change into the new repo and commit it before writing code.
-- [ ] 1.3 Add `rust-toolchain.toml`, `Cross.toml`, and a `Cargo.toml` with default features that build without hardware.
-- [ ] 1.4 Add the `hardware` Cargo feature gating `rppal` and `ws2812-spi`; verify the default build and tests pass on macOS.
-- [ ] 1.5 Add a `HANDOFF.md` at the repo root that points to `proposal.md`, `design.md`, `tasks.md`, and the legacy repository.
+- [x] 1.1 Create the public `github.com/suhlig/wordclock-rs` repository with MIT OR Apache-2.0 licensing, README, `.gitignore`, and a single Rust crate (lib + bin).
+- [x] 1.2 Copy this OpenSpec change into the new repo and commit it before writing code.
+- [x] 1.3 Add `rust-toolchain.toml`, `Cross.toml`, and a `Cargo.toml` with default features that build without hardware.
+- [x] 1.4 Add the `hardware` Cargo feature gating `rppal` and `ws2812-spi`; verify the default build and tests pass on macOS.
+- [x] 1.5 Add a `HANDOFF.md` at the repo root that points to `proposal.md`, `design.md`, `tasks.md`, and the legacy repository.
 
 ## 2. Golden oracle and core port
 
-- [ ] 2.1 In the legacy repo, generate `fixtures/minutes.json` with the documented Ruby command and verify it has 1,440 entries, 503,999 bytes, and SHA-256 `33824892ca69303599c72cf6c7651a0f1d0bb9111ae312ef51dc943278df454e`.
-- [ ] 2.2 Verify the legacy stripe checksum `aed1c38776d7be5a34e40eb376dce927d4a80efb6f7781a874a8eaa7adfe65b8` and the 922-entry normalized XKCD checksum `9ac5913dccc2200cd46e2b5c4f61d05a5779d8f934b99788c652b34b3ee75d0e` before porting.
+- [x] 2.1 Generate `fixtures/minutes.json` in this repo from the legacy Ruby library with the documented command and verify it has 1,440 entries, 503,999 bytes, and SHA-256 `33824892ca69303599c72cf6c7651a0f1d0bb9111ae312ef51dc943278df454e`.
+- [x] 2.2 Verify the legacy stripe checksum `aed1c38776d7be5a34e40eb376dce927d4a80efb6f7781a874a8eaa7adfe65b8` and the 922-entry normalized XKCD checksum `9ac5913dccc2200cd46e2b5c4f61d05a5779d8f934b99788c652b34b3ee75d0e` before porting.
 - [ ] 2.3 Port the 288-character stripe, `hour_words`, `minute_words`, sequential lookup, and `pixels`/`words` behavior exactly.
 - [ ] 2.4 Add a test that replays all 1,440 fixture entries and compares both the pixel list and the word string.
 - [ ] 2.5 Add property tests for non-empty output, strictly increasing indices, indices below 288, and the known lit-count range 11–39.

@@ -1,6 +1,6 @@
 # Wordclock Rust rewrite — handoff
 
-Status: planning complete, implementation not started. OpenSpec 1.14.2 validates this change with `openspec validate replace-fadecandy-with-rust --strict`.
+Status: planning complete, crate scaffold in place, clock port not started. OpenSpec 1.14.2 validates this change with `openspec validate replace-fadecandy-with-rust --strict`.
 
 This repository is the planned replacement for `github.com/suhlig/wordclock`. It is not a git repository yet and nothing has been pushed. The legacy repository remains the behavioral oracle and must not be changed except to generate the fixture.
 
@@ -71,7 +71,7 @@ Useful legacy facts:
 ## First actions for the implementing agent
 
 1. Create the GitHub repository and copy this directory into it. Do not push the legacy repository.
-2. Add the Rust workspace and the `hardware` feature split. Confirm `cargo test` passes on macOS without hardware.
+2. Add the Rust crate and the `hardware` feature split. Confirm `cargo test` passes on macOS without hardware.
 3. Generate and verify the golden fixture before writing the clock renderer.
 4. Port the clock renderer and color pipeline against the fixture; do not touch wording.
 5. Build the terminal simulator and demo loop; use them for all development before touching the Pi.
