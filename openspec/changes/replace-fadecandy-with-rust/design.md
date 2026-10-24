@@ -23,14 +23,15 @@ Fadecandy is dead upstream and cannot be patched. The Ruby LED ecosystem is thin
 **Goals:**
 
 - Preserve the current visible output exactly: the same words, the same pixel indices, the same color cadence, and the same gamma-corrected colors.
+- Make an orderly stop unmistakable on the strip, so an outdated minute is never read as the current time.
 - Ship a single aarch64 Linux binary that runs on 64-bit Raspberry Pi OS and drives the strip over SPI.
 - Keep the simulator as a first-class, hardware-free development and test surface.
-- Make deployment reproducible from a blank SD card and keep a tested rollback to the current SD card and Fadecandy board.
+- Make deployment reproducible from a blank SD card and keep a tested rollback to the current SD card and Fadecandy board, which are temporary: the board leaves the signal path once the rollback window closes and is not part of the target hardware.
 - Leave clean extension points for the deferred ideas in the Reminders list.
 
 **Non-Goals:**
 
-- No new user-facing features: no smooth fades, animations, night dimming or blackout, countdowns, calendar integration, web UI, Prometheus, MQTT, sensors, buttons, or shutdown symbol in this change.
+- No new user-facing features beyond the shutdown pattern: no smooth fades, animations, night dimming or blackout, countdowns, calendar integration, web UI, Prometheus, MQTT, sensors, or buttons in this change.
 - No wording cleanup. The quirks stay until after the port, in a separate change.
 - No OPC compatibility layer. External OPC clients are not part of the clock.
 - No support for multiple strips, multiple Fadecandy-style devices, or per-device mapping.
@@ -82,11 +83,11 @@ BOM additions:
 | Optional logic analyzer | 1 | Verify SPI timing and data integrity |
 | Optional 5 A fuse | 1 | LED supply protection |
 
-The existing 300-LED WS2812 strip, MeanWell 5 V supply, Pi 3B, and Fadecandy board (rollback) are reused.
+The existing 300-LED WS2812 strip, MeanWell 5 V supply, and Pi 3B are reused. The Fadecandy board is not part of the target hardware: it stays connected only as the rollback path until the new SPI output has passed the rollback drill and two weeks of stable operation, then it is removed and retired.
 
 ### D4: Run as a long-running systemd service
 
-Cron-per-minute cannot hold state, animate, gate on NTP, or expose health. The daemon owns the display, computes a frame at each local minute boundary, and refreshes the current frame once per second. The service runs as the non-root `wordclock` user with `spi`, `gpio`, and `i2c` supplementary groups. The unit uses `Restart=always`, `RestartSec=2`, `After=network-online.target time-sync.target`, `Wants=network-online.target time-sync.target`, `NoNewPrivileges=true`, `ProtectSystem=strict`, `ProtectHome=true`, and `PrivateTmp=true`. It does not use `PrivateDevices`, because that would hide `/dev/spidev0.0`.
+Cron-per-minute cannot hold state, animate, gate on NTP, or expose health. The daemon owns the display, computes a frame at each local minute boundary, and refreshes the current frame once per second. The service runs as the non-root `wordclock` user with `spi`, `gpio`, and `i2c` supplementary groups. The unit uses `Restart=always`, `RestartSec=2`, `After=network-online.target time-sync.target`, `Wants=network-online.target time-sync.target`, `TimeoutStopSec=10`, `NoNewPrivileges=true`, `ProtectSystem=strict`, `ProtectHome=true`, and `PrivateTmp=true`. It does not use `PrivateDevices`, because that would hide `/dev/spidev0.0`.
 
 ### D5: Keep the core pure and put hardware behind a display trait
 
@@ -200,7 +201,13 @@ The current code assumes logical index order equals physical order, and the cloc
 
 ### D14: Rollback is a card swap, not a code revert
 
-Keep the current SD card untouched. Keep the Fadecandy board and USB cable. If the new build fails, power off, swap the old SD card back in, reconnect Fadecandy to the strip, and boot. The legacy cron and `fcserver` are still installed there. Do not erase or repurpose the old card until the new clock has run for at least two weeks, including a reboot, an NTP-delayed boot, and a network outage.
+Keep the current SD card untouched. Keep the Fadecandy board and USB cable available as the rollback path. If the new build fails, power off, swap the old SD card back in, reconnect Fadecandy to the strip, and boot. The legacy cron and `fcserver` are still installed there. Do not erase or repurpose the old card, and do not remove the board, until the new clock has run for at least two weeks, including a reboot, an NTP-delayed boot, and a network outage. After that window, remove the board and USB cable from the installation and retire them; the SPI wiring is the permanent data path.
+
+### D15: Show an explicit shutdown pattern instead of clearing to black
+
+The legacy clock has no shutdown indication. On a service stop or an orderly reboot the last frame stays latched on the strip, so a stale minute can be read as the current time. Clearing to black fixes the stale time but is indistinguishable from an unpowered, dead, or dimmed clock. The daemon therefore writes a uniform dim white fill of all 288 logical pixels as its final frame on SIGTERM, using the raw value 32,32,32 and bypassing the gamma table, because the gamma curve would map 32 to 1 and make the pattern nearly invisible. A uniform fill cannot encode a word or a time, and the dim level stays visible without glare at night.
+
+WS2812 latches its last frame, so the pattern survives process exit and remains until power is cut. During an orderly `systemctl stop`, `reboot`, or `poweroff`, systemd delivers SIGTERM and the unit's `TimeoutStopSec=10` bounds the write; the default shutdown dependencies stop the unit before power is lost. The guarantee is best effort: SIGKILL, a crash, or a power cut leaves the last clock frame, and the daemon cannot react. This promotes the deferred powered-off symbol in its smallest useful form, as an explicit exception to the parity-only scope.
 
 ## Risks / Trade-offs
 
@@ -217,7 +224,8 @@ Keep the current SD card untouched. Keep the Fadecandy board and USB cable. If t
 | Rust rewrite diverges from Ruby behavior | The 1,440-minute golden fixture, ported occasion tests, and the simulator parity check are the gate. |
 | Two repositories drift apart | The legacy repo is frozen after the fixture is generated; the new repo links to it and copies the hardware and migration docs. |
 | Host key for `wordclock` changed since the last connection | Verify the new fingerprint with the human before trusting it; do not disable host-key checking in automation. |
-| Scope creep from the Reminders list | This change is parity-only; every new idea becomes a separate OpenSpec change after the cutover. |
+| Service stop or orderly shutdown leaves a stale minute | The daemon writes the uniform dim shutdown pattern on SIGTERM, and the unit's stop timeout bounds the write before power loss. |
+| Scope creep from the Reminders list | This change is parity-only plus the shutdown pattern; every other new idea becomes a separate OpenSpec change after the cutover. |
 
 ## References
 
@@ -233,12 +241,24 @@ Keep the current SD card untouched. Keep the Fadecandy board and USB cable. If t
 
 ## Deferred Reminders backlog
 
-The Reminders list "Wordclock" mixes completed hardware work with open ideas. Nothing below is part of this change. The open ideas are recorded here so the architecture does not close doors, and each becomes its own OpenSpec proposal after the parity cutover.
+The Reminders list "Wordclock" held 56 items on 2026-10-24: 16 open and 40 completed. Nothing below is part of this change. The open ideas are recorded here so the architecture does not close doors, and each becomes its own OpenSpec proposal after the parity cutover.
+
+**Open ideas**
 
 - Observability: a web log of timestamp and color with SSE or WebSocket refresh; Prometheus metrics for current R, G, B, and luminance; MQTT publish of color hex, name, and timestamp; reading luminosity from Prometheus and filtering colors.
-- User-facing behavior: smooth fade between minutes; night dimming or blackout; New Year and birthday countdowns; birthday colors from a calendar; a Matrix animation; particle explosion on PIR trigger; rear demo buttons; a powered-off symbol on shutdown.
-- Sensors and hardware: current sensor, voltage logging, backplane temperature, TSL2561 lux, PIR, battery/RTC support, and button wiring.
-- Operations: NTP configuration in Ansible, apt auto-update, log rotation, SSH and keyboard setup, and backup to `git.uhlig.it`.
-- Superseded or obsolete: `clockwork`/`rufus-scheduler` (the daemon owns scheduling), Docker deployment (a static binary with direct SPI access is simpler and avoids device passthrough), minute LEDs, seconds LEDs, Blinkenlights, the icon tool, and the old `exe/off` blackout hack.
+- User-facing behavior: smooth fade between minutes; extending the New Year countdown to birthdays and showing the last ten seconds before midnight as large digits; a Matrix animation; rear demo buttons; animations while nobody is home as a burglary deterrent.
+- Sensors and hardware: current sensor with logging; voltage logging; backplane temperature logging; button wiring for the rear demo buttons.
+- Superseded or obsolete: `clockwork`/`rufus-scheduler` (the daemon owns scheduling).
 
-The NTP startup gate is the one Reminders item promoted into this change, because the Pi 3 has no RTC and a wrong time is worse than a dark clock. Completed hardware items such as the PIR, lux sensor, and brightness control are not assumed to be absent; they are simply not wired into v1.
+**Completed work in the same list**
+
+- Observability: node-exporter or collectd, the InfluxDB role, telegraf, and publishing the lux reading to InfluxDB.
+- User-facing behavior: PIR-triggered particle explosion, birthday letters, colorful letters and a New Year countdown on 31 December, random xkcd color names, luminance filtering, brightness control, and the Westminster hour chime.
+- Sensors and hardware: PIR, TSL2561 lux sensor, and a battery/RTC test.
+- Operations: NTP configuration in Ansible, apt auto-update, log rotation (judged unnecessary), SSH and German keyboard setup, and backup to `git.uhlig.it`.
+- Superseded or obsolete: Docker deployment, minute LEDs, seconds LEDs, Blinkenlights, icon code removal, and a shutdown button (not worth it; use SSH).
+- Hardware and assembly: foils, spacers, foam rubber, long power cable, and packaging.
+
+Two deferred ideas are not in the Wordclock list: night dimming or blackout has no reminder at all, and drawing on the clock through TouchOSC or an HTML interface sits in the "Someday / Maybe" list. The old `exe/off` blackout hack is obsolete and is not a Reminders item either.
+
+The NTP startup gate and the uniform shutdown pattern are the two Reminders items promoted into this change. The gate exists because the Pi 3 has no RTC and a wrong time is worse than a dark clock; the pattern exists because an orderly stop must not leave a stale minute looking current. Completed hardware items are not assumed to be absent; they are simply not wired into v1.

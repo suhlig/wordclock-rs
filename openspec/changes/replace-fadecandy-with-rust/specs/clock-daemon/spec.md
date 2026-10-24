@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Runs the clock continuously on the Pi, updating at minute boundaries and surviving reboots, NTP delays, and transient output errors.
+Runs the clock continuously on the Pi, updating at minute boundaries, surviving reboots, NTP delays, and transient output errors, and making an orderly stop unmistakable on the strip.
 
 ## ADDED Requirements
 
@@ -47,11 +47,41 @@ The daemon SHALL keep running after a failed LED write and SHALL retry on the ne
 - **THEN** the daemon logs the error and attempts the next write without exiting
 
 ### Requirement: Graceful shutdown
-On SIGTERM, the daemon SHALL stop scheduling new frames, clear the strip to black, and exit successfully.
+On SIGTERM, the daemon SHALL stop scheduling new frames, attempt to write the shutdown pattern, log the outcome, and exit successfully.
 
 #### Scenario: Service stop
 - **WHEN** the operator runs `systemctl stop wordclock`
-- **THEN** the strip turns off and the service exits within the configured stop timeout
+- **THEN** the strip replaces the last minute with the shutdown pattern and the service exits within the configured stop timeout
+
+#### Scenario: Failing shutdown write
+- **WHEN** the shutdown-pattern write fails
+- **THEN** the daemon logs the error and still exits within the stop timeout
+
+### Requirement: Shutdown pattern
+On an orderly stop, the daemon SHALL replace the last clock frame with a uniform dim fill of all logical pixels, so the strip cannot be read as showing a time.
+
+#### Scenario: Pattern cannot read as a time
+- **WHEN** the shutdown pattern is written
+- **THEN** every logical pixel is lit at the same dim value and no word from the previous minute is visible
+
+#### Scenario: Pattern survives process exit
+- **WHEN** the daemon has exited and the strip still has power
+- **THEN** the strip continues to show the uniform fill, because the WS2812 strip latches its last frame
+
+#### Scenario: System shutdown or reboot
+- **WHEN** the system is shut down or rebooted in an orderly way
+- **THEN** systemd delivers SIGTERM, the daemon writes the shutdown pattern before exiting, and the pattern remains until the LED supply is cut
+
+### Requirement: Shutdown fill rendering
+The fill SHALL use the raw value 32,32,32 for every logical pixel, bypass the clock gamma table, and leave padding beyond 288 black. A uniform fill cannot encode a time, and bypassing gamma keeps it clearly visible. This applies to orderly stops only, not to SIGKILL, crashes, or power loss.
+
+#### Scenario: Gamma bypass
+- **WHEN** the shutdown fill is rendered
+- **THEN** each logical pixel is transmitted as 32,32,32 rather than the gamma-corrected value for 32
+
+#### Scenario: Padded strip
+- **WHEN** the configured physical strip is longer than 288 pixels
+- **THEN** the shutdown pattern lights all logical pixels and leaves the padding pixels black
 
 ### Requirement: No runtime network dependency
 After the initial time synchronization, the daemon SHALL continue rendering if the network becomes unavailable.

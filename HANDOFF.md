@@ -22,14 +22,15 @@ Then run `openspec instructions apply --change replace-fadecandy-with-rust` for 
 | Hardware | Keep the Raspberry Pi 3B; reflash a new SD with 64-bit Raspberry Pi OS Lite. Old SD is rollback. |
 | LED output | Pi SPI0 GPIO10 at 3 MHz, 74AHCT125 or 74HCT245 level shifter, 470 Ω series resistor, common ground. |
 | Runtime | Long-running systemd daemon, not cron. |
-| v1 scope | Parity only: same words, colors, gamma, cadence, 24/7. No new user-facing features. |
+| v1 scope | Parity only, plus an explicit dim shutdown pattern on orderly stops: same words, colors, gamma, cadence, 24/7. No other new user-facing features. |
 | Simulator | Terminal snapshot, fixed color/seed override, and full-day demo loop. No web UI in v1. |
 | Wording | Preserve the current hybrid phrasing and quirks exactly. Fix them only in a later change. |
 | Colors | New random color each minute on regular days; per-pixel on carnival, birthdays, and New Year party; grey on Ash Wednesday and New Year hangover. |
 | Gamma | Fadecandy curve with gamma 2.5, whitepoint 1,1,1, linearCutoff 0. Dithering only if visual comparison requires it. |
 | NTP | Do not show time after boot until `timedatectl` reports synchronized. |
+| Shutdown | On SIGTERM, write a uniform dim fill (raw 32,32,32) across all logical pixels as the final frame; never leave a stale minute that reads as current. |
 | Build | GitHub Actions cross-compiles aarch64; Ansible installs the pinned release and removes Fadecandy/Ruby/cron. |
-| Rollback | Card swap plus Fadecandy reconnect; keep the old SD and board until two weeks of stable operation. |
+| Rollback | Card swap plus Fadecandy reconnect; keep the old SD and board until two weeks of stable operation, then remove the board from the signal path and retire it. |
 
 Hardware note (2026-10-24): the strip in use is WS2812, not WS2811B. Both use the same 800 kHz NZR protocol and the same 0.7 × VDD input threshold at 5 V, so the wiring, SPI encoding, and software are unchanged. The Adafruit BSS138 level shifter is not suitable for the data line: its 10 kΩ pull-ups produce roughly 1–2 µs edges, while a WS2812 bit is 1.25 µs and its high pulses are 0.4/0.8 µs. Use the 74AHCT125 or 74HCT245 from D3.
 
@@ -42,7 +43,7 @@ Host note (2026-10-24): the Raspberry Pi Zero 2 W at `rpizero.local` (now `wordc
 - Do not trust identity pixel mapping until the walking-pixel and row test patterns have been run on the real strip.
 - Do not power the Pi from the LED supply without a protected 5 V path.
 - Do not add web, MQTT, Prometheus, sensors, animations, night blackout, or OPC in this change.
-- Do not remove the old SD card or Fadecandy board until the rollback drill passes.
+- Do not remove the old SD card or Fadecandy board until the rollback drill passes; after two weeks of stability, remove the board from the signal path and retire it. The board is a temporary rollback aid, not part of the target hardware.
 - Do not use the dead GitHub Fadecandy URLs or `git submodule sync` in the reference clone.
 
 ## Parity oracle

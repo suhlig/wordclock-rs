@@ -34,6 +34,13 @@ Ansible SHALL install a pinned release version and SHALL verify the published ch
 - **WHEN** the downloaded artifact does not match the expected checksum
 - **THEN** provisioning fails without replacing the running binary
 
+### Requirement: Shutdown stop budget
+The systemd unit SHALL keep the default shutdown dependencies and SHALL set a stop timeout of at least 10 seconds, so the daemon can write the shutdown pattern and exit before an orderly halt, poweroff, or reboot removes power.
+
+#### Scenario: Orderly poweroff
+- **WHEN** the operator runs `systemctl poweroff` or `systemctl reboot`
+- **THEN** the unit is stopped with SIGTERM, the shutdown pattern is visible, and the daemon is not killed by SIGKILL
+
 ### Requirement: Non-root service
 The daemon SHALL run as a dedicated non-root `wordclock` user with access to the SPI, GPIO, and I2C device groups.
 
@@ -49,11 +56,15 @@ The installed configuration SHALL control logical pixel count, physical strip le
 - **THEN** the daemon writes the new number of pixels and pads or truncates the word area as configured
 
 ### Requirement: Rollback
-The legacy SD card and Fadecandy board SHALL remain usable as a documented rollback path until the new implementation has proven itself.
+The legacy SD card and Fadecandy board SHALL remain usable as a documented rollback path until the new implementation has proven itself, and the Fadecandy board SHALL be removed from the signal path once that rollback window closes.
 
 #### Scenario: Rollback drill
 - **WHEN** the operator swaps the old SD card back in and reconnects Fadecandy
 - **THEN** the legacy Ruby cron and `fcserver` render the clock again without code changes
+
+#### Scenario: Retire the rollback board
+- **WHEN** the new implementation has run for the agreed stability window
+- **THEN** the operator removes the Fadecandy board and USB cable from the installation, and the SPI wiring remains the only data path
 
 ### Requirement: Hardware guide
 The repository SHALL document the level-shifter wiring, bill of materials, SPI enablement, test-pattern procedure, and rollback procedure.

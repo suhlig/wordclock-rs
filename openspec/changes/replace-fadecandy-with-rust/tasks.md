@@ -49,10 +49,11 @@
 - [ ] 5.3 Implement per-minute uniform color resampling and per-minute per-pixel sampling for occasion modes; never resample on the 1 Hz refresh.
 - [ ] 5.4 Implement the NTP gate using `timedatectl show -p NTPSynchronized --value`, with an off or neutral frame and a log every 30 seconds while waiting.
 - [ ] 5.5 Implement the 1 Hz refresh and the retry-on-write-failure behavior.
-- [ ] 5.6 Implement graceful SIGTERM handling that clears the strip and exits successfully.
+- [ ] 5.6 Implement graceful SIGTERM handling that writes the uniform dim shutdown pattern (raw 32,32,32 across all logical pixels, padding black), logs the stop, and exits successfully.
 - [ ] 5.7 Implement single-instance protection so a second daemon cannot write the strip.
-- [ ] 5.8 Add the systemd unit with the user, groups, restart policy, time-sync ordering, and hardening flags from `design.md`.
+- [ ] 5.8 Add the systemd unit with the user, groups, restart policy, time-sync ordering, `TimeoutStopSec=10`, and hardening flags from `design.md`.
 - [ ] 5.9 Add structured logging for startup, NTP waits, minute changes, color changes, and output errors; confirm journal visibility.
+- [ ] 5.10 Add a test that SIGTERM produces exactly one shutdown frame, that it contains no word from the previous minute, that every logical pixel is 32,32,32, and that padding pixels stay black.
 
 ## 6. Build and release
 
@@ -75,11 +76,11 @@
 - [ ] 8.1 Capture fixed-color reference photos of the legacy clock at 00:00, 00:06, 01:05, 11:15, 12:15, 13:15, and 23:55.
 - [ ] 8.2 Render the same times and colors with the Rust build and compare the words, pixel positions, and gamma-corrected colors side by side.
 - [ ] 8.3 Run the new daemon for 24 hours and confirm every minute updates, no minute is skipped, and the color changes once per minute.
-- [ ] 8.4 Reboot the Pi and confirm the NTP gate, service start, and correct first frame.
+- [ ] 8.4 Reboot the Pi and confirm the shutdown pattern on the way down, then the NTP gate, service start, and correct first frame.
 - [ ] 8.5 Disconnect the network after startup and confirm the clock keeps rendering from the local clock.
-- [ ] 8.6 Stop and start the service and confirm the strip clears and recovers.
+- [ ] 8.6 Stop and start the service and confirm the strip shows the shutdown pattern, then recovers to the current time.
 - [ ] 8.7 Run the rollback drill: swap the old SD card back in, reconnect Fadecandy, and confirm the legacy clock works.
-- [ ] 8.8 After at least two weeks of stable operation, remove Fadecandy from the signal path and keep the board and old SD card as spares.
+- [ ] 8.8 After at least two weeks of stable operation, remove Fadecandy from the signal path and retire the board; keep the old SD card as the last-resort image.
 
 ## 9. Documentation and follow-up
 
