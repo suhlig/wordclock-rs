@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-10-24
+goal: Replace the Fadecandy/OPC/Ruby stack with a Rust daemon that drives the
+  288-pixel WS2811B clock over SPI on a 64-bit Raspberry Pi, preserving current
+  behavior exactly.
