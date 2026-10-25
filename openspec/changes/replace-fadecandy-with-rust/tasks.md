@@ -14,7 +14,7 @@
 - [x] 2.2 Verify the legacy stripe checksum `aed1c38776d7be5a34e40eb376dce927d4a80efb6f7781a874a8eaa7adfe65b8` and the 922-entry normalized XKCD checksum `9ac5913dccc2200cd46e2b5c4f61d05a5779d8f934b99788c652b34b3ee75d0e` before porting.
 - [x] 2.3 Port the 288-character stripe, `hour_words`, `minute_words`, sequential lookup, and `pixels`/`words` behavior exactly, keeping the clock module free of host and transport dependencies.
 - [x] 2.4 Add a test that replays all 1,440 fixture entries and compares both the pixel list and the word string.
-- [ ] 2.5 Add property tests for non-empty output, strictly increasing indices, indices below 288, the known lit-count range 11–39, and at least one dark cell between lit runs on the same row. Cover the five known `HALB`/`SIEBEN` row-crossing cases (06:20, 06:25, 06:30, 06:35, 06:40) explicitly.
+- [x] 2.5 Add property tests for non-empty output, strictly increasing indices, indices below 288, the known lit-count range 11–39, and at least one dark cell between lit runs on the same row. Cover the five known `HALB`/`SIEBEN` row-crossing cases (06:20, 06:25, 06:30, 06:35, 06:40) explicitly.
 - [ ] 2.6 Generate the 922-entry Rust XKCD table from the legacy Ruby file and add a table-integrity test.
 - [ ] 2.7 Port `ColorPicker`, all occasion arbiters, and the grey 64,64,64 cases; test regular, 11 November, Rosenmontag, Faschingsdienstag, Ash Wednesday, birthdays, New Year party, and New Year hangover.
 - [ ] 2.8 Implement the gamma 2.5 and whitepoint correction LUT and test the vectors 0→0, 32→1, 64→8, 96→22, 128→46, 160→80, 192→125, 224→184, 255→255.
