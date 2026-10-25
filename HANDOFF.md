@@ -1,8 +1,8 @@
 # Wordclock Rust rewrite — handoff
 
-Status: planning complete, crate scaffold and golden fixture in place, clock core port next. The host is deliberately undecided: the Raspberry Pi 3B and the ESP32-C3-DevKit-RUST-1 are both candidates, and a measured spike after the core and simulator selects one. OpenSpec 1.14.2 validates this change with `openspec validate replace-fadecandy-with-rust --strict`.
+Status: planning complete, crate scaffold and golden fixture in place, clock core ported against the fixture; simulator next. The host is deliberately undecided: the Raspberry Pi 3B and the ESP32-C3-DevKit-RUST-1 are both candidates, and a measured spike after the core and simulator selects one. OpenSpec 1.14.2 validates this change with `openspec validate replace-fadecandy-with-rust --strict`.
 
-Progress: tasks 1.1–1.5 and 2.1–2.2 are complete. Next are 2.3–2.5, the simulator tasks in section 3, and then the host decision gate in section 4.
+Progress: tasks 1.1–1.5 and 2.1–2.4 are complete. Next are 2.5 and the simulator tasks in section 3, then the host decision gate in section 4.
 
 This repository is the planned replacement for `github.com/suhlig/wordclock`. It is a public git repository and the current branch is pushed. The legacy repository remains the behavioral oracle and must not be changed except to generate the fixture.
 

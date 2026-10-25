@@ -2,7 +2,7 @@
 
 Rust replacement for the Fadecandy/OPC/Ruby word clock at [github.com/suhlig/wordclock](https://github.com/suhlig/wordclock).
 
-Status: planning complete, crate scaffold and golden fixture in place, clock core port next. The host is an open decision between the Raspberry Pi 3B and an ESP32-C3; the plan is an OpenSpec change under `openspec/changes/replace-fadecandy-with-rust/`.
+Status: planning complete, crate scaffold and golden fixture in place, clock core ported against the fixture; simulator next. The host is an open decision between the Raspberry Pi 3B and an ESP32-C3; the plan is an OpenSpec change under `openspec/changes/replace-fadecandy-with-rust/`.
 
 Start with [HANDOFF.md](HANDOFF.md), then read the proposal, design, specs, and tasks in that order.
 
