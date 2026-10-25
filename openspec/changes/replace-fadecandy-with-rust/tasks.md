@@ -40,7 +40,7 @@ Run this gate after tasks 2 and 3 and before any hardware provisioning. The core
 - [x] 4.4 Implement Wi-Fi association and SNTP synchronization on the C3; verify the boot gate, reconnect after network loss, and periodic resynchronization.
 - [x] 4.5 Implement the `Europe/Berlin` local-time and DST rule for the C3; compare it against `chrono-tz` on the host across the fixture and future transition dates through 2030.
 - [x] 4.6 Render the 06:30 fixture frame on the C3 and compare its indices and corrected colors with the host simulator.
-- [ ] 4.7 Measure boot-to-first-frame time, frame time, RMT inter-chunk gaps, flash and RAM use with the timezone rule and OTA partitions, and Wi-Fi recovery time; record the numbers in `design.md` D16. Measured on 2026-10-25 except the worst-case inter-chunk gap, which needs the 4.3 analyzer capture.
+- [x] 4.7 Measure boot-to-first-frame time, frame time, RMT inter-chunk gaps, flash and RAM use with the timezone rule and OTA partitions, and Wi-Fi recovery time; record the numbers in `design.md` D16.
 - [ ] 4.8 Decide the host against the D16 criteria and record the choice and evidence in `design.md`; if the spike is inconclusive, keep the Pi.
 - [ ] 4.9 If the ESP32-C3 is selected, split the workspace into `wordclock-core` (`no_std` + `alloc`), `wordclock-host` (simulator, CLI, Pi daemon), and `wordclock-esp32` (firmware); if the Pi is selected, keep the single crate and the `hardware` feature.
 

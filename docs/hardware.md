@@ -177,6 +177,20 @@ A Raspberry Pi Pico H flashed with `sigrok-pico` gives an open logic analyzer fo
 
 The firmware caps digital capture at 120 Msps, limited by the 120 MHz PIO clock. Neither RP2040 nor RP2350 changes that, so any Pico works.
 
+Channel `D2` in sigrok is GPIO2 on the Pico (physical pin 4), and GPIO2 is also the ESP32-C3's on-board WS2812 and the strip data pin. A direct 3.3 V clip therefore captures the real RMT stream without the level shifter, which is the right way to check timing before the 5 V side exists. Use `GND` on physical pin 3 and never clip the Pico to the 5 V side.
+
+The released `sigrok-cli` 0.7.2 and PulseView 0.4.2 do not include the driver. Build libsigrok and sigrok-cli from git; as of 2026-10-25 the Homebrew HEAD formula fails on a Python-bindings patch, so configure with `--disable-cxx --disable-python --disable-java`.
+
+Capture without a trigger. The `raspberrypi-pico` driver switches to USB streaming for triggered captures, which overflows at 24 MHz; the untriggered fixed-depth path runs at full rate.
+
+```bash
+sigrok-cli -d raspberrypi-pico:conn=/dev/cu.usbmodemYYYY:serialcomm=115200/flow=0 \
+  --config samplerate=24000000 --channels D2 --samples 380000 -o /tmp/ws2812.sr
+sigrok-cli -i /tmp/ws2812.sr -P rgb_led_ws281x -A rgb_led_ws281x=rgb-vals
+```
+
+With the C3 streaming frames back-to-back, this measured a 0.708 µs longest intra-frame low, decoded all 288 pixels identically to the host simulator, and never approached the 50 µs reset threshold.
+
 WARNING: RP2040 and RP2350 GPIO are 3.3 V only and are not 5 V tolerant. Clip to GPIO10 or to pin 2 (1A). Never connect the shifted 5 V signal at pin 3 (1Y) or at strip DIN directly to a Pico pin; use a 10 kΩ/10 kΩ divider if the 5 V side must be observed. A dedicated analyzer with adjustable thresholds does not have this limitation.
 
 What to look for in a capture: a 0.4 µs high pulse for a zero bit, 0.8 µs for a one bit, and a low period that keeps the bit period near 1.25 µs. At an SPI clock of 2.4 MHz each WS2812 bit is encoded as three SPI bits, so a zero appears as `100` and a one as `110`.

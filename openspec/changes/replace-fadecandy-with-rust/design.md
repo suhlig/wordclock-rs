@@ -292,12 +292,12 @@ Measured on 2026-10-25 with the combined gate firmware (real core plus the `Euro
 | Boot to first (neutral) frame | 246 ms |
 | Boot to first SNTP / clock frame | 2.3 s clean; 11.3 s after an abrupt reset with a stale access-point session |
 | Full 288-pixel frame | 8.1–8.2 ms typical, 10.5 ms worst case (all white) |
-| RMT refill overhead | About 0.7–0.8 ms per frame, about 5 µs average per refill; the worst single gap still needs the analyzer |
+| RMT inter-chunk gap | None measurable: the longest low inside a frame is 0.708 µs at 24 MHz resolution, far below the 50 µs WS2812 reset |
 | Flash with timezone + OTA | 556,496 of 1,966,080 bytes (28.3%) in one OTA slot |
 | RAM | 54,432-byte heap peak of 103,184, plus a 27,656-byte static RMT buffer |
 | Wi-Fi reconnect | 5.1 s including the 5 s backoff; association itself about 0.1 s |
 
-The only outstanding hardware question is the worst-case RMT inter-chunk gap, which needs the Pico analyzer and the level shifter in task 4.3. Every other D16 criterion has measured headroom; the Pi 3B remains the default if the analyzer shows a gap near the WS2812 reset threshold.
+The RMT timing question is closed: the Pico analyzer captured two frames with no low interval above 0.708 µs, and `rgb_led_ws281x` decoded all 288 pixels identically to the host simulator. Task 4.3 still needs the level shifter and the real strip to prove the 5 V levels and edge quality, but not the gap. The Pi 3B remains the default if the 5 V strip test fails.
 
 ### D17: ESP32-C3 output and time
 

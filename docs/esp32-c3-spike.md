@@ -76,7 +76,7 @@ Measured on 2026-10-25 with the combined gate firmware (`spike/esp32c3-wifi`): W
 | Boot to first SNTP response | 2.30 s when the AP has no stale session for this MAC; 11.29 s and 11.33 s after an abrupt reset while still associated |
 | Boot to first clock frame | 2.39 s clean, 11.42 s with a stale session |
 | Full 288-pixel frame time | 8.10–8.18 ms for the clock frame; 8.15 ms all-zero; 10.45 ms all-white |
-| RMT inter-chunk gap | Aggregate refill overhead 0.69–0.82 ms per frame over about 144 refills, so about 5 µs each on average; the worst single gap still needs the Pico analyzer |
+| RMT inter-chunk gap | None measurable: the longest low inside a frame is 0.708 µs (the normal zero bit) in two captures covering 9,697 and 10,335 bits at 24 MHz; far below the 50 µs WS2812 reset |
 | Flash use with timezone + OTA partitions | 556,496 of 1,966,080 bytes (28.30%) in one OTA slot; 1,409,584 bytes free |
 | Flash use with the default single-app layout | 556,496 of 4,128,768 bytes (13.48%) |
 | RAM use | Heap 103,184 bytes: 1,728 used after boot, 50,308 after Wi-Fi, 54,432 peak (52.8%); plus a 27,656-byte static RMT buffer |
@@ -84,7 +84,7 @@ Measured on 2026-10-25 with the combined gate firmware (`spike/esp32c3-wifi`): W
 
 The consistent 2.30 s versus 11.3 s difference is the DHCP lease reacquisition after an abrupt reset: the access point still holds the previous association for the same MAC. A power loss looks like that case, so plan for up to about 12 s of neutral frame after boot rather than the clean 2.4 s.
 
-Theoretical transmission for 288 RGB pixels at `WS2812_TIMING` is 7.34 ms all-zero and 9.76 ms all-one including the 80 µs reset. The measured values are 0.7–0.8 ms above that, consistent with the RMT driver refilling its memory every 48 codes; the average gap is far below the WS2812 reset threshold, but the worst case still needs 4.3's analyzer capture.
+The software `write()` time includes the 80 µs reset, buffer conversion, and channel hand-over, so it overstates the line time. The analyzer capture is authoritative: one frame carries 7.311 ms of bitstream and no low interval above 0.708 µs. The setup was the Pico H with `sigrok-pico` and the `raspberrypi-pico` driver, clipped directly to GPIO2 (3.3 V, so no level shifter was needed), one channel at 24 MHz, 380,000 samples. The `frame-loop` feature streams the 06:30 frame back-to-back for the capture, and `rgb_led_ws281x` decoded all 288 pixels identically to `examples/dump_frame.rs` for the same time and seed.
 
 ## 4.8 Decision
 
