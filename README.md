@@ -42,6 +42,14 @@ openspec status --change replace-fadecandy-with-rust
 openspec instructions apply --change replace-fadecandy-with-rust
 ```
 
+## Ebook
+
+```bash
+./scripts/build-openspec-ebook.sh
+```
+
+Renders `dist/replace-fadecandy-with-rust.epub` and `.pdf` for reading on a tablet. The book opens with a cover built from `docs/images/wordclock-front.jpg`, followed by the OpenSpec proposal, design, tasks, and capability specs, then the project documentation: this README, the hardware guide, the ESP32-C3 spike, and the handoff. Mermaid diagrams are rendered with `mermaid-cli`, fetched through `npx` unless `mmdc` is already on `PATH`.
+
 ## License
 
 Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
