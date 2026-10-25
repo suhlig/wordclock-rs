@@ -38,6 +38,13 @@ The system SHALL locate each word of a phrase sequentially in the grid, starting
 - **WHEN** a phrase contains multiple words
 - **THEN** the first word's first index precedes the second word's first index, and the two words' pixel ranges do not overlap
 
+### Requirement: Host-independent core
+The clock renderer SHALL NOT depend on the Raspberry Pi, the ESP32-C3, SPI, RMT, or an operating system. The same 1,440-minute fixture SHALL pass unchanged in the host simulator and in either target's test build.
+
+#### Scenario: Same fixture on both hosts
+- **WHEN** the fixture replay runs in the host simulator and in the selected target's test build
+- **THEN** both produce the fixture's pixel lists and word strings
+
 ### Requirement: Diagnostic sentence
 The system SHALL expose the concatenated characters of a rendered pixel list as a sentence string for diagnostics and the simulator, omitting grid positions that are not lit.
 

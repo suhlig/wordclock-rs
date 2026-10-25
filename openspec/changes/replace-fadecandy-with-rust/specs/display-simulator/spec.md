@@ -2,19 +2,19 @@
 
 ## Purpose
 
-Renders the same frame the Pi would show to a terminal, so the clock logic and color pipeline can be developed and tested without hardware.
+Renders the same frame the selected hardware would show to a terminal, so the clock logic and color pipeline can be developed and tested without hardware.
 
 ## ADDED Requirements
 
 ### Requirement: Hardware-free operation
-The simulator SHALL run on macOS and Linux without SPI, GPIO, Fadecandy, or network access.
+The simulator SHALL run on macOS and Linux without SPI, RMT, GPIO, Fadecandy, or network access.
 
 #### Scenario: Simulator on a laptop
 - **WHEN** the simulator is built and run on macOS
 - **THEN** it renders a frame without opening a hardware device or failing on missing permissions
 
 ### Requirement: Same frame as hardware
-For the same time, occasion, color seed, and pixel configuration, the simulator SHALL render the same lit indices and the same corrected colors as the hardware frame.
+For the same time, occasion, color seed, and pixel configuration, the simulator SHALL render the same lit indices and the same corrected colors as the hardware frame on either host.
 
 #### Scenario: Simulator and hardware agree
 - **WHEN** a fixed time and fixed color sequence are rendered through both backends

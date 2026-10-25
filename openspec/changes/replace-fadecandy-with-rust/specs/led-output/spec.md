@@ -2,9 +2,20 @@
 
 ## Purpose
 
-Delivers a complete color frame to the physical WS2812/WS2812B strip with the correct pixel count, pixel order, color order, and recovery behavior.
+Delivers a complete color frame to the physical WS2812/WS2812B strip over the selected host's transport, with the correct pixel count, pixel order, color order, and recovery behavior.
 
 ## ADDED Requirements
+
+### Requirement: Host output transport
+The system SHALL drive the strip through the selected host's supported transport: SPI0 on the Raspberry Pi and one RMT TX channel on the ESP32-C3. Both transports SHALL emit the same WS2812/WS2812B waveform, pixel order, and green-red-blue color order.
+
+#### Scenario: Pi SPI output
+- **WHEN** a frame is written on the Pi
+- **THEN** it is transmitted over SPI0 to `/dev/spidev0.0` with the configured clock
+
+#### Scenario: ESP32-C3 RMT output
+- **WHEN** a frame is written on the ESP32-C3
+- **THEN** it is transmitted over the selected RMT channel at the WS2812 bit timing
 
 ### Requirement: Complete frame with padding
 The system SHALL write all 288 logical word pixels and, when the physical strip is longer, SHALL write the remaining pixels as black.
@@ -43,11 +54,15 @@ The system SHALL refresh the current frame at least once per second while the da
 - **THEN** the daemon rewrites the same frame within one second and the display recovers
 
 ### Requirement: Output failure handling
-If the LED output device is unavailable or a write fails, the system SHALL log the failure and keep retrying; it SHALL NOT exit silently or leave the previous error unreported.
+If the LED output device is unavailable or a write fails, the system SHALL report the failure and keep retrying or restarting the output task; it SHALL NOT exit silently or leave the previous error unreported.
 
-#### Scenario: SPI device missing
+#### Scenario: SPI device missing on the Pi
 - **WHEN** the daemon starts without the configured SPI device
-- **THEN** it logs a clear error, remains running, and retries until the device becomes available
+- **THEN** it reports a clear error, remains running, and retries until the device becomes available
+
+#### Scenario: RMT output unavailable on the ESP32-C3
+- **WHEN** the RMT channel cannot be initialized or a transfer fails
+- **THEN** the firmware reports a clear error and retries or restarts the output task without silently stopping
 
 ### Requirement: Hardware diagnostic pattern
 The system SHALL provide a test pattern that can walk individual pixels, light rows in distinct colors, and show the primary colors.
@@ -64,5 +79,5 @@ The system SHALL provide a test pattern that can walk individual pixels, light r
 The system SHALL drive the strip without Fadecandy, USB, or Open Pixel Control.
 
 #### Scenario: Boot without Fadecandy
-- **WHEN** the Pi boots with no Fadecandy board attached
-- **THEN** the daemon still renders the clock over SPI
+- **WHEN** the selected host boots with no Fadecandy board attached
+- **THEN** it still renders the clock over its configured transport
