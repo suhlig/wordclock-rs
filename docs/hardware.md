@@ -179,7 +179,7 @@ The firmware caps digital capture at 120 Msps, limited by the 120 MHz PIO clock.
 
 Channel `D2` in sigrok is GPIO2 on the Pico (physical pin 4), and GPIO2 is also the ESP32-C3's on-board WS2812 and the strip data pin. A direct 3.3 V clip therefore captures the real RMT stream without the level shifter, which is the right way to check timing before the 5 V side exists. Use `GND` on physical pin 3 and never clip the Pico to the 5 V side.
 
-The released `sigrok-cli` 0.7.2 and PulseView 0.4.2 do not include the driver. Run `scripts/setup-sigrok-pico.sh`, which builds libsigrok and sigrok-cli from git into `$HOME/opt/sigrok-pico` and skips the C++, Python, and Java bindings that make the Homebrew HEAD formula fail. Add `$HOME/opt/sigrok-pico/bin` to `PATH`; the script verifies the driver and the decoder.
+The released `sigrok-cli` 0.7.2 and PulseView 0.4.2 do not include the driver. Run `scripts/setup-sigrok-pico.sh`, which builds libsigrok and sigrok-cli from git into `$HOME/opt/sigrok-pico` and skips the C++, Python, and Java bindings that make the Homebrew HEAD formula fail. Add `$HOME/opt/sigrok-pico/bin` to `PATH`; the script verifies the driver and the decoder. The Homebrew `glib`, `libserialport`, `libusb`, `libzip`, `hidapi`, and `libftdi` packages must stay installed at runtime; install them explicitly so `brew autoremove` does not remove them.
 
 Capture without a trigger. The `raspberrypi-pico` driver switches to USB streaming for triggered captures, which overflows at 24 MHz; the untriggered fixed-depth path runs at full rate.
 

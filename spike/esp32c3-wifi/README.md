@@ -78,4 +78,6 @@ sigrok-cli -i /tmp/ws2812.sr -P rgb_led_ws281x -A rgb_led_ws281x=rgb-vals
 
 Recorded result: the longest low inside a frame is 0.708 µs, the decoded 288 pixels match `examples/dump_frame.rs` for the same time and seed, and the frame carries 7.311 ms of bitstream. The 50 µs WS2812 reset is never approached.
 
+A capture can start mid-frame, so the first decoded pixels may belong to the previous frame. Align on the first long low (or the decoder's RESET annotation) before comparing; a correct frame then matches with zero differences.
+
 If the Pi host is selected, delete this directory. If the ESP32-C3 is selected, task 4.9 moves the shared code into a real `wordclock-core` crate and this harness becomes the basis of the firmware.
