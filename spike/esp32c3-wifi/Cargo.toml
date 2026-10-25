@@ -82,6 +82,8 @@ libm     = "0.2"
 # are well formed. It stays off: the firmware seeds its own RNG.
 std = []
 reconnect-test = []
+# Repeat one 288-pixel frame forever without Wi-Fi, for analyzer captures.
+frame-loop = []
 
 # For fine tuning these settings, please refer to https://doc.rust-lang.org/cargo/reference/profiles.html
 [profile.dev]

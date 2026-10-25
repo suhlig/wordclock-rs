@@ -128,6 +128,7 @@ impl NtpTimestampGenerator for Timestamp<'_> {
     clippy::large_stack_frames,
     reason = "it's not unusual to allocate larger buffers etc. in main"
 )]
+#[cfg_attr(feature = "frame-loop", allow(unreachable_code, unused_variables))]
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     esp_println::logger::init_logger_from_env();
@@ -155,6 +156,20 @@ async fn main(spawner: Spawner) -> ! {
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     esp_rtos::start(timg0.timer0, peripherals.FROM_CPU_INTR0);
+
+    // Analyzer helper: stream one frame forever so a logic analyzer can
+    // capture it without waiting for the SNTP-gated one-per-minute update.
+    #[cfg(feature = "frame-loop")]
+    {
+        let local = chrono::NaiveDate::from_ymd_opt(2026, 7, 15)
+            .and_then(|date| date.and_hms_opt(6, 30, 0))
+            .expect("valid time");
+        let pixels = clock_pixels(local, 42);
+        loop {
+            write_frame(&mut leds, &pixels);
+            Timer::after(Duration::from_millis(2)).await;
+        }
+    }
 
     // First frame: neutral, before any time source is trusted.
     let neutral = vec![RGB8::new(0, 0, 0); PIXELS];
