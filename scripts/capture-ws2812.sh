@@ -29,8 +29,9 @@ Usage:
   scripts/capture-ws2812.sh [options]
 
 Options:
-  -p, --port DEVICE    Pico CDC port; defaults to $SIGROK_PICO_PORT or the
-                       single matching /dev/cu.usbmodem* or /dev/ttyACM*
+  -p, --port DEVICE    Pico CDC port; defaults to $SIGROK_PICO_PORT, then the
+                       port that identifies as a Pico, then a single
+                       /dev/cu.usbmodem* or /dev/ttyACM*
   -o, --output FILE    session file to write or read (default /tmp/ws2812.sr)
   -r, --rate HZ        sample rate (default 24000000)
   -c, --channel CH     digital channel (default D2, which is GPIO2)
@@ -111,7 +112,25 @@ detect_port() {
         return 0
     fi
 
-    local pattern matches count
+    local listing matches count pattern
+
+    # The sigrok-pico firmware reports itself as "Pico", while the ESP32-C3's
+    # USB-serial/JTAG port reports something else. Prefer that identity over a
+    # wildcard, because both boards enumerate as /dev/cu.usbmodem*.
+    listing="$("$SIGROK_CLI" --list-serial 2>/dev/null || true)"
+    matches="$(printf '%s\n' "$listing" \
+        | awk -F'\t' 'tolower($2) ~ /pico/ { gsub(/^ +| +$/, "", $1); print $1 }')"
+    count="$(printf '%s' "$matches" | grep -c . || true)"
+
+    if [ "$count" -eq 1 ]; then
+        echo "$matches"
+        return 0
+    fi
+    if [ "$count" -gt 1 ]; then
+        printf 'error: several ports identify as a Pico:\n%s\n' "$matches" >&2
+        fail "pass --port to choose one"
+    fi
+
     case "$(uname -s)" in
         Darwin) pattern="/dev/cu.usbmodem*" ;;
         *) pattern="/dev/ttyACM*" ;;
@@ -121,10 +140,11 @@ detect_port() {
     count="$(printf '%s' "$matches" | grep -c . || true)"
 
     if [ "$count" -eq 0 ]; then
-        fail "no Pico found at $pattern; pass --port or check '$SIGROK_CLI --list-serial'"
+        fail "no Pico found; pass --port or check '$SIGROK_CLI --list-serial'"
     fi
     if [ "$count" -gt 1 ]; then
         printf 'error: several ports match %s:\n%s\n' "$pattern" "$matches" >&2
+        printf '%s\n' "$listing" >&2
         fail "pass --port; the ESP32-C3 also enumerates as a usbmodem"
     fi
 
