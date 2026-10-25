@@ -9,7 +9,7 @@ The clock, color, and frame code must move into a `no_std` + `alloc` core crate 
 | Module | Alloc | Std / OS dependency | Notes |
 | :--- | :--- | :--- | :--- |
 | `clock` | Yes (`Vec`, `String`) | None | Pure, fixture-tested |
-| `color` | Yes (`Vec`, static table) | None after the `libm` change | `chrono::NaiveDate`/`Datelike` need the `alloc` feature only; `fastrand::Rng::with_seed` and `computus` are `no_std`; `libm` provides `pow` and `round` |
+| `color` | Yes (`Vec`, static table) | None after the `libm` change | `chrono::NaiveDate`/`Datelike` need the `alloc` feature only; `fastrand::Rng::with_seed` and `computus` are `no_std`; `libm` provides `pow` and `round`; the seedless `ColorPicker::new(None, ...)` arm is behind the `std` feature because `Rng::new` does not exist without it |
 | `frame` | Yes (`Vec`) | None | Pure |
 | `display` | Yes | `std::io` in the terminal backend | Host-only; the firmware supplies an RMT `Display` |
 | `sim` | Yes | `chrono::Local`, `std::io`, `std::thread` | Host-only |
@@ -60,7 +60,11 @@ The seedless `ColorPicker::new(None, ...)` path uses `fastrand::Rng::new`, which
 
 ## 4.6 Fixture frame
 
-Render 06:30 on the C3 and compare its lit indices and corrected colors with the host simulator, including the split `HALB`/`SIEBEN` run.
+- `spike/esp32c3-frame` includes the real `src/clock.rs`, `src/color.rs`, and `src/frame.rs` through `#[path]`, so it runs the host code rather than a copy. It also proves that the core compiles for `riscv32imc-unknown-none-elf` with `no_std` + `alloc`.
+- Three scenarios at 06:30: fixed color `c04020` on 2026-07-15, seed 42 on the same regular day, and seed 42 on Rosenmontag 2026-02-16 for per-pixel sampling.
+- The device dump and `examples/dump_frame.rs` are byte-identical after stripping the serial CRLF: 870 lines, empty `diff`. That covers the 288 logical pixels, the raw colors, and the gamma-corrected colors, including the split `HALB`/`SIEBEN` run.
+- Image size: 102,800 of 4,128,768 bytes (2.49%) without Wi-Fi, RMT, or the timezone rule.
+- Two portability bugs were found and fixed in the core: `sample_xkcd` used `rng.usize`, which is 32-bit on the C3 and 64-bit on the host, so the same seed gave different colors; it now draws a `u64`. And `ColorPicker::new(None, ...)` needs `fastrand::Rng::new`, which is `std`-only, so the seedless arm is behind the new default `std` feature and the firmware uses `ColorPicker::from_rng`.
 
 ## 4.7 Measurements
 
