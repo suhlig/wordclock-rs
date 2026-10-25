@@ -15,20 +15,20 @@
 - [x] 2.3 Port the 288-character stripe, `hour_words`, `minute_words`, sequential lookup, and `pixels`/`words` behavior exactly, keeping the clock module free of host and transport dependencies.
 - [x] 2.4 Add a test that replays all 1,440 fixture entries and compares both the pixel list and the word string.
 - [x] 2.5 Add property tests for non-empty output, strictly increasing indices, indices below 288, the known lit-count range 11–39, and at least one dark cell between lit runs on the same row. Cover the five known `HALB`/`SIEBEN` row-crossing cases (06:20, 06:25, 06:30, 06:35, 06:40) explicitly.
-- [ ] 2.6 Generate the 922-entry Rust XKCD table from the legacy Ruby file and add a table-integrity test.
-- [ ] 2.7 Port `ColorPicker`, all occasion arbiters, and the grey 64,64,64 cases; test regular, 11 November, Rosenmontag, Faschingsdienstag, Ash Wednesday, birthdays, New Year party, and New Year hangover.
-- [ ] 2.8 Implement the gamma 2.5 and whitepoint correction LUT and test the vectors 0→0, 32→1, 64→8, 96→22, 128→46, 160→80, 192→125, 224→184, 255→255.
-- [ ] 2.9 Add a test that the same frame written twice in one minute is byte-identical and does not resample colors.
-- [ ] 2.10 Do not change any wording or edge-case phrase in this change; record any desired cleanup in a separate OpenSpec proposal.
+- [x] 2.6 Generate the 922-entry Rust XKCD table from the legacy Ruby file and add a table-integrity test.
+- [x] 2.7 Port `ColorPicker`, all occasion arbiters, and the grey 64,64,64 cases; test regular, 11 November, Rosenmontag, Faschingsdienstag, Ash Wednesday, birthdays, New Year party, and New Year hangover.
+- [x] 2.8 Implement the gamma 2.5 and whitepoint correction LUT and test the vectors 0→0, 32→1, 64→8, 96→22, 128→46, 160→80, 192→125, 224→184, 255→255.
+- [x] 2.9 Add a test that the same frame written twice in one minute is byte-identical and does not resample colors.
+- [x] 2.10 Do not change any wording or edge-case phrase in this change; record any desired cleanup in a separate OpenSpec proposal.
 
 ## 3. Simulator and demo
 
-- [ ] 3.1 Define `Frame`, `Rgb`, and the `Display` trait; implement a null backend for tests and a terminal backend for the simulator.
-- [ ] 3.2 Implement `wordclock sim [TIME]` with the legacy `DD.MM.YYYY HH:MM` format, an ISO-like format, and a default of now.
-- [ ] 3.3 Implement `--color RRGGBB` and `--seed N` so screenshots and visual comparisons are reproducible.
-- [ ] 3.4 Implement `wordclock demo` walking all 1,440 minutes at a configurable interval, with progress on stderr.
-- [ ] 3.5 Render 16 rows of 18 colored characters with dim unlit cells, matching the legacy terminal layout.
-- [ ] 3.6 Add a test that the simulator and the hardware frame pipeline produce the same indices and corrected colors for the same time and seed.
+- [x] 3.1 Define `Frame`, `Rgb`, and the `Display` trait; implement a null backend for tests and a terminal backend for the simulator.
+- [x] 3.2 Implement `wordclock sim [TIME]` with the legacy `DD.MM.YYYY HH:MM` format, an ISO-like format, and a default of now.
+- [x] 3.3 Implement `--color RRGGBB` and `--seed N` so screenshots and visual comparisons are reproducible.
+- [x] 3.4 Implement `wordclock demo` walking all 1,440 minutes at a configurable interval, with progress on stderr.
+- [x] 3.5 Render 16 rows of 18 colored characters with dim unlit cells, matching the legacy terminal layout.
+- [x] 3.6 Add a test that the simulator and the hardware frame pipeline produce the same indices and corrected colors for the same time and seed.
 
 ## 4. Host decision gate and ESP32-C3 spike
 

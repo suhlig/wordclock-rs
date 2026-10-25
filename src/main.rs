@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use wordclock::color::Rgb;
+use wordclock::sim::{self, RenderOptions};
 
 /// Word clock for a 288-pixel WS2812 strip.
 #[derive(Debug, Parser)]
@@ -37,7 +39,7 @@ enum Command {
     /// Walk all 1,440 minutes of a day in the terminal.
     Demo {
         /// Seconds to wait between frames.
-        #[arg(long, default_value_t = 0.5)]
+        #[arg(long, default_value_t = 0.2)]
         interval: f64,
     },
 
@@ -52,8 +54,20 @@ enum Command {
 fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Run { .. } => not_implemented("run"),
-        Command::Sim { .. } => not_implemented("sim"),
-        Command::Demo { .. } => not_implemented("demo"),
+        Command::Sim { time, color, seed } => {
+            let options = RenderOptions {
+                color: parse_color(color)?,
+                seed,
+                ..RenderOptions::default()
+            };
+            let datetime = match time {
+                Some(time) => sim::parse_time(&time)?,
+                None => sim::now(),
+            };
+
+            sim::run(datetime, options)
+        }
+        Command::Demo { interval } => sim::demo(RenderOptions::default(), interval),
         Command::TestPattern { .. } => {
             #[cfg(not(feature = "hardware"))]
             anyhow::bail!("`wordclock test-pattern` requires a build with the `hardware` feature");
@@ -62,6 +76,14 @@ fn main() -> Result<()> {
             not_implemented("test-pattern")
         }
     }
+}
+
+fn parse_color(value: Option<String>) -> Result<Option<Rgb>> {
+    value
+        .map(|value| {
+            Rgb::from_hex(&value).with_context(|| format!("invalid RRGGBB color {value:?}"))
+        })
+        .transpose()
 }
 
 fn not_implemented(name: &str) -> Result<()> {
