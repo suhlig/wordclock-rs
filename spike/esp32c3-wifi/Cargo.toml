@@ -32,7 +32,7 @@ embassy-net = { version = "0.9.1", features = [
 ] }
 embedded-io = "0.7.1"
 embedded-io-async = "0.7.0"
-esp-alloc = { version = "0.11.0", features = ["esp32c3"] }
+esp-alloc = { version = "0.11.0", features = ["esp32c3", "internal-heap-stats"] }
 esp-backtrace = { version = "0.20.0", features = [
   "esp32c3",
   "panic-handler",
@@ -70,8 +70,17 @@ static_cell      = "2.1.1"
 esp-hal-smartled = { version = "0.18.0", features = ["esp32c3"] }
 smart-leds = "0.4.0"
 
+# The core modules used by the host, compiled without std for the C3.
+chrono   = { version = "0.4", default-features = false, features = ["alloc"] }
+computus = "2"
+fastrand = { version = "2", default-features = false, features = ["alloc"] }
+libm     = "0.2"
+
 
 [features]
+# Present so the `#[cfg(feature = "std")]` gates shared with the host crate
+# are well formed. It stays off: the firmware seeds its own RNG.
+std = []
 reconnect-test = []
 
 # For fine tuning these settings, please refer to https://doc.rust-lang.org/cargo/reference/profiles.html
