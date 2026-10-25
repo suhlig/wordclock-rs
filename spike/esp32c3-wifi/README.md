@@ -64,6 +64,8 @@ With the feature, the firmware forces a disconnect 15 seconds after each associa
 
 The `frame-loop` feature skips Wi-Fi and writes the 06:30 frame back-to-back with a 2 ms gap, so a fixed-depth capture always contains a whole frame. Clip the Pico H to GPIO2 directly; it is a 3.3 V signal, so the level shifter is not needed for timing work.
 
+Build the host client once with `scripts/setup-sigrok-pico.sh` and add `$HOME/opt/sigrok-pico/bin` to `PATH`. The released sigrok-cli and the Homebrew HEAD formula do not provide a working `raspberrypi-pico` driver.
+
 ```bash
 cargo build --release --features frame-loop
 espflash flash --chip esp32c3 --port /dev/cu.usbmodemXXXX target/riscv32imc-unknown-none-elf/release/esp32c3-wifi
