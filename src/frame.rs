@@ -1,5 +1,8 @@
 //! Rendered frame: logical pixels plus physical padding.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use crate::color::{GammaLut, Rgb};
 
 /// A complete frame at logical resolution, ready for correction and output.

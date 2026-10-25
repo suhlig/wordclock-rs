@@ -8,6 +8,9 @@
 //! characters, and dark cells (or a row break) are the spaces. Do not add space
 //! characters or "space pixels".
 
+use alloc::string::String;
+use alloc::vec::Vec;
+
 use crate::COLS;
 
 /// The legacy 16×18 word stripe, exactly as published by the word clock.

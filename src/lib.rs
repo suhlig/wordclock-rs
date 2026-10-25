@@ -6,6 +6,10 @@
 
 #![forbid(unsafe_code)]
 
+// `core` modules use `alloc` types directly so the same files can be included
+// by the `no_std` ESP32-C3 firmware without a `std` prelude.
+extern crate alloc;
+
 pub mod clock;
 pub mod color;
 pub mod config;

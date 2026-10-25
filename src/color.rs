@@ -5,7 +5,10 @@
 //! curve is Fadecandy's: whitepoint scaling, then pow(2.5), then rounding to
 //! 8 bits.
 
+#[path = "color/xkcd.rs"]
 mod xkcd;
+
+use alloc::vec::Vec;
 
 use chrono::{Datelike, NaiveDate};
 use fastrand::Rng;
@@ -63,8 +66,14 @@ pub fn all_xkcd() -> impl Iterator<Item = NamedColor> {
 }
 
 /// Samples one legacy XKCD color with replacement.
+///
+/// The draw uses `u64` explicitly rather than `usize`: `fastrand` samples
+/// `usize` with 32 bits on a 32-bit target and 64 bits on a 64-bit target, so
+/// a pointer-width-dependent draw would give the ESP32-C3 different colors
+/// than the host or the Pi for the same seed.
 pub fn sample_xkcd(rng: &mut Rng) -> NamedColor {
-    let (r, g, b, name) = xkcd::COLORS[rng.usize(..xkcd::COLORS.len())];
+    let index = rng.u64(..xkcd::COLORS.len() as u64) as usize;
+    let (r, g, b, name) = xkcd::COLORS[index];
     NamedColor {
         rgb: Rgb::new(r, g, b),
         name,
@@ -134,10 +143,17 @@ impl ColorPicker {
     }
 
     /// Creates a picker with an explicit birthday list.
+    ///
+    /// The seedless form needs OS entropy; without the `std` feature it
+    /// panics, and the firmware builds a picker with
+    /// [`ColorPicker::from_rng`] instead.
     pub fn new(seed: Option<u64>, birthdays: Vec<(u32, u32)>) -> Self {
         let rng = match seed {
             Some(seed) => Rng::with_seed(seed),
+            #[cfg(feature = "std")]
             None => Rng::new(),
+            #[cfg(not(feature = "std"))]
+            None => panic!("the seedless color picker requires the `std` feature"),
         };
 
         Self::from_rng(rng, birthdays)
@@ -296,6 +312,27 @@ mod tests {
             format!("{digest:x}"),
             "9ac5913dccc2200cd46e2b5c4f61d05a5779d8f934b99788c652b34b3ee75d0e"
         );
+    }
+
+    #[test]
+    fn seeded_sampling_is_pointer_width_independent() {
+        // fastrand samples `usize` with the target's pointer width, so a
+        // `usize` draw would give the 32-bit firmware different colors than
+        // the 64-bit host for the same seed. These values pin the `u64` draw.
+        let mut rng = fastrand::Rng::with_seed(42);
+        let expected = [
+            ((248, 72, 28), "reddishorange"),
+            ((216, 220, 214), "lightgrey"),
+            ((109, 237, 253), "robinsegg"),
+            ((172, 29, 184), "barney"),
+            ((198, 252, 255), "lightskyblue"),
+        ];
+
+        for (rgb, name) in expected {
+            let color = sample_xkcd(&mut rng);
+            assert_eq!((color.rgb.r, color.rgb.g, color.rgb.b), rgb);
+            assert_eq!(color.name, name);
+        }
     }
 
     #[test]

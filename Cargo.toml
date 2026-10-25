@@ -8,7 +8,10 @@ repository = "https://github.com/suhlig/wordclock-rs"
 readme = "README.md"
 
 [features]
-default = []
+# The host build uses `std` for OS entropy in `ColorPicker::new`. The core
+# modules also compile without it, which is what the ESP32-C3 firmware needs.
+default = ["std"]
+std = []
 hardware = ["dep:rppal", "dep:smart-leds-trait", "dep:ws2812-spi"]
 
 [dependencies]
