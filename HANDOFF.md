@@ -2,7 +2,7 @@
 
 Status: planning complete, crate scaffold and golden fixture in place, clock core, color pipeline, and simulator complete; host decision gate next. The host is deliberately undecided: the Raspberry Pi 3B and the ESP32-C3-DevKit-RUST-1 are both candidates, and a measured spike after the core and simulator selects one. OpenSpec 1.14.2 validates this change with `openspec validate replace-fadecandy-with-rust --strict`.
 
-Progress: tasks 1.1–1.5, 2.1–2.10, and 3.1–3.6 are complete. Next is the host decision gate in section 4: the ESP32-C3 spike and the recorded Pi-or-C3 choice, then only the selected hardware path.
+Progress: tasks 1.1–1.5, 2.1–2.10, 3.1–3.6, 4.1, 4.2, and 4.5 are complete. The on-board WS2812 RMT test is running on GPIO2 and awaits visual color confirmation; the 288-pixel strip test in 4.3 waits for the level shifter. The working log is `docs/esp32-c3-spike.md`.
 
 This repository is the planned replacement for `github.com/suhlig/wordclock`. It is a public git repository and the current branch is pushed. The legacy repository remains the behavioral oracle and must not be changed except to generate the fixture.
 

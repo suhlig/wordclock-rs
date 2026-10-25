@@ -14,10 +14,10 @@ hardware = ["dep:rppal", "dep:smart-leds-trait", "dep:ws2812-spi"]
 [dependencies]
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-chrono-tz = "0.10"
 clap = { version = "4", features = ["derive"] }
 computus = "2"
 fastrand = "2"
+libm = "0.2"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 toml = "1"
@@ -30,6 +30,7 @@ ws2812-spi = { version = "0.5", features = ["std"], optional = true }
 
 [dev-dependencies]
 assert_cmd = "2"
+chrono-tz = "0.10"
 predicates = "3"
 rstest = "0.28"
 serde_json = "1"

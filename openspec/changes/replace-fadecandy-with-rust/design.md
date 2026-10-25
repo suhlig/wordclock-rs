@@ -269,7 +269,7 @@ The host is chosen after the core and simulator exist, not before. Two candidate
 - How much flash and RAM remain after the timezone rule, Wi-Fi, and OTA partitions?
 - How much effort are flashing, OTA, and rollback compared with Ansible and a systemd unit?
 
-The comparison is recorded in this design and in `tasks.md`. If the spike is inconclusive, the Pi 3B wins by default: it is the incumbent and its rollback is already proven.
+The comparison is recorded in this design and in `tasks.md`. The working audit, toolchain notes, and measurement log live in `docs/esp32-c3-spike.md`. If the spike is inconclusive, the Pi 3B wins by default: it is the incumbent and its rollback is already proven.
 
 | Criterion | Raspberry Pi 3B | ESP32-C3-DevKit-RUST-1 |
 | :--- | :--- | :--- |

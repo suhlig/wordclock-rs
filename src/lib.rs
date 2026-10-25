@@ -13,6 +13,7 @@ pub mod daemon;
 pub mod display;
 pub mod frame;
 pub mod sim;
+pub mod timezone;
 
 /// Number of columns in the 18x16 word grid.
 pub const COLS: usize = 18;

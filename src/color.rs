@@ -85,7 +85,7 @@ impl GammaLut {
         for channel in 0..3 {
             for value in 0..=255u8 {
                 let input = f64::from(value) / 255.0 * whitepoint[channel];
-                let corrected = (input.powf(2.5) * 255.0).round();
+                let corrected = libm::round(libm::pow(input, 2.5) * 255.0);
                 channels[channel][value as usize] = corrected.clamp(0.0, 255.0) as u8;
             }
         }
@@ -120,6 +120,19 @@ pub struct ColorPicker {
 }
 
 impl ColorPicker {
+    /// Creates a picker from an explicit RNG and birthday list.
+    ///
+    /// This is the no-std-friendly constructor: the firmware seeds its own
+    /// RNG, while the host can use [`ColorPicker::new`] with `None` for
+    /// entropy from the operating system.
+    pub fn from_rng(rng: Rng, birthdays: Vec<(u32, u32)>) -> Self {
+        Self {
+            rng,
+            birthdays,
+            cached: None,
+        }
+    }
+
     /// Creates a picker with an explicit birthday list.
     pub fn new(seed: Option<u64>, birthdays: Vec<(u32, u32)>) -> Self {
         let rng = match seed {
@@ -127,11 +140,7 @@ impl ColorPicker {
             None => Rng::new(),
         };
 
-        Self {
-            rng,
-            birthdays,
-            cached: None,
-        }
+        Self::from_rng(rng, birthdays)
     }
 
     /// Creates a picker with the legacy default birthday list.
