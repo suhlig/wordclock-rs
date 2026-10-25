@@ -68,15 +68,23 @@ The seedless `ColorPicker::new(None, ...)` path uses `fastrand::Rng::new`, which
 
 ## 4.7 Measurements
 
+Measured on 2026-10-25 with the combined gate firmware (`spike/esp32c3-wifi`): Wi-Fi, DHCP, SNTP, the real core and `Europe/Berlin` rule, and a 288-pixel RMT frame, with an OTA partition table for the size measurement.
+
 | Measurement | Result |
 | :--- | :--- |
-| Boot to first frame | Pending |
-| Boot to first SNTP response | Not instrumented yet; early boot lines are lost because the monitor attaches after flash. Add an explicit boot timestamp before recording. |
-| Full 288-pixel frame time | Pending |
-| RMT inter-chunk gap | Pending |
-| Flash use with timezone + OTA partitions | Pending |
-| RAM use | Pending |
-| Wi-Fi reconnect time | About 5 s after a forced disconnect, including the backoff |
+| Boot to first frame | 245.9 ms from chip reset to the completed neutral write (236.8 ms bootloader plus HAL init, 8.1 ms frame write) |
+| Boot to first SNTP response | 2.30 s when the AP has no stale session for this MAC; 11.29 s and 11.33 s after an abrupt reset while still associated |
+| Boot to first clock frame | 2.39 s clean, 11.42 s with a stale session |
+| Full 288-pixel frame time | 8.10–8.18 ms for the clock frame; 8.15 ms all-zero; 10.45 ms all-white |
+| RMT inter-chunk gap | Aggregate refill overhead 0.69–0.82 ms per frame over about 144 refills, so about 5 µs each on average; the worst single gap still needs the Pico analyzer |
+| Flash use with timezone + OTA partitions | 556,496 of 1,966,080 bytes (28.30%) in one OTA slot; 1,409,584 bytes free |
+| Flash use with the default single-app layout | 556,496 of 4,128,768 bytes (13.48%) |
+| RAM use | Heap 103,184 bytes: 1,728 used after boot, 50,308 after Wi-Fi, 54,432 peak (52.8%); plus a 27,656-byte static RMT buffer |
+| Wi-Fi reconnect time | 5.10 s and 5.07 s after a forced disconnect, of which 5 s is the deliberate backoff; association itself is about 0.1 s |
+
+The consistent 2.30 s versus 11.3 s difference is the DHCP lease reacquisition after an abrupt reset: the access point still holds the previous association for the same MAC. A power loss looks like that case, so plan for up to about 12 s of neutral frame after boot rather than the clean 2.4 s.
+
+Theoretical transmission for 288 RGB pixels at `WS2812_TIMING` is 7.34 ms all-zero and 9.76 ms all-one including the 80 µs reset. The measured values are 0.7–0.8 ms above that, consistent with the RMT driver refilling its memory every 48 codes; the average gap is far below the WS2812 reset threshold, but the worst case still needs 4.3's analyzer capture.
 
 ## 4.8 Decision
 

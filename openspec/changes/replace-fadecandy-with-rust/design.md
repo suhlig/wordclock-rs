@@ -285,6 +285,20 @@ The comparison is recorded in this design and in `tasks.md`. The working audit, 
 | Power / size | higher / larger | lower / small |
 | Main risk | SD and OS maintenance | Wi-Fi, flash pressure, OTA |
 
+Measured on 2026-10-25 with the combined gate firmware (real core plus the `Europe/Berlin` rule, Wi-Fi/SNTP, a 288-pixel RMT frame, and an OTA partition table). The host choice itself is task 4.8.
+
+| Measurement | ESP32-C3-DevKit-RUST-1 |
+| :--- | :--- |
+| Boot to first (neutral) frame | 246 ms |
+| Boot to first SNTP / clock frame | 2.3 s clean; 11.3 s after an abrupt reset with a stale access-point session |
+| Full 288-pixel frame | 8.1–8.2 ms typical, 10.5 ms worst case (all white) |
+| RMT refill overhead | About 0.7–0.8 ms per frame, about 5 µs average per refill; the worst single gap still needs the analyzer |
+| Flash with timezone + OTA | 556,496 of 1,966,080 bytes (28.3%) in one OTA slot |
+| RAM | 54,432-byte heap peak of 103,184, plus a 27,656-byte static RMT buffer |
+| Wi-Fi reconnect | 5.1 s including the 5 s backoff; association itself about 0.1 s |
+
+The only outstanding hardware question is the worst-case RMT inter-chunk gap, which needs the Pico analyzer and the level shifter in task 4.3. Every other D16 criterion has measured headroom; the Pi 3B remains the default if the analyzer shows a gap near the WS2812 reset threshold.
+
 ### D17: ESP32-C3 output and time
 
 If the ESP32-C3 is selected, the output uses one RMT TX channel at 800 kHz NZR with the WS2812 GRB order, sending all 288 logical pixels plus black padding. Choose a free, non-strapping header GPIO after checking the board schematic; avoid the USB and boot-strapping pins. The data line still goes through the 74AHCT125 (or 74HCT245), the 470 Ω series resistor, and a common ground; the C3 is 3.3 V and the strip expects a 5 V-referenced data high. The RMT driver may emit the frame in chunks; verify with the Pico analyzer that the inter-chunk gap stays well below the WS2812 reset threshold, otherwise the strip will latch mid-frame.
