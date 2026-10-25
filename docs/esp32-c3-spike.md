@@ -37,14 +37,20 @@ The seedless `ColorPicker::new(None, ...)` path uses `fastrand::Rng::new`, which
 
 - The board's own README maps the on-board WS2812 to GPIO2 (not GPIO8, which is the generic DevKitM-1 pin).
 - `spike/esp32c3-blink` now drives that LED over RMT with `esp-hal-smartled` 0.18.0, `WS2812_TIMING`, and GRB order. It cycles red, green, blue, white, off every 700 ms.
-- The sequence is visible in the USB Serial/JTAG log. Visual color-order confirmation is pending.
+- Visual confirmation: the on-board LED cycles red, green, blue, white, off in that order, so the GRB byte order and RMT timing are correct for this LED.
 - The 288-pixel offcut strip test still waits for the 74AHCT125 and passives on Wednesday. That test will use a free header GPIO, the level shifter, a 470 Ω series resistor, and the Pico analyzer for pulse widths and inter-chunk gaps.
 
 ## 4.4 Wi-Fi and SNTP
 
-- 2.4 GHz association, SNTP synchronization, and the neutral frame until the first sync.
-- Reconnect after an access-point restart and resynchronize periodically.
-- Keep rendering from the local clock after the initial sync if the network drops.
+- Implemented in `spike/esp32c3-wifi` with `esp-radio` 1.0.0-beta.1, `esp-rtos` 0.4.0, `embassy-net` 0.9.1, and `sntpc` 0.11.0. It builds cleanly for `riscv32imc-unknown-none-elf`.
+- Credentials are read from a gitignored `wifi.env` by `build.rs`; `wifi.env.example` is the tracked template. The password is compiled into this spike only.
+- The firmware associates in station mode, gets a DHCP lease, resolves `pool.ntp.org`, and requests SNTP over UDP every 60 seconds.
+- The on-board WS2812 is off until the first SNTP response and green afterwards. It stays green if the network drops, while the Wi-Fi task reconnects.
+- Status: verified on the board on `/dev/cu.usbmodem1101` against the local 2.4 GHz access point.
+- Observed: a DHCP lease on the local subnet, an SNTP response (`unix=1792924384`), a 60 s resynchronization, and the boot gate (LED off until the first SNTP response, then green and staying green).
+- Reconnect verified with `--features reconnect-test`: a forced disconnect drives `IPv4: DOWN`, the controller reassociates on the same BSSID and channel 1, the lease returns on the same IP, and `synced` stays true.
+- Reconnect takes roughly 5 s, dominated by the deliberate backoff in the Wi-Fi task.
+- The release image with Wi-Fi, SNTP, and RMT is 520,544 of 4,128,768 bytes (12.6%) on the default single-app partition layout, before the timezone rule and OTA partitions are added.
 
 ## 4.5 Timezone
 
@@ -61,11 +67,12 @@ Render 06:30 on the C3 and compare its lit indices and corrected colors with the
 | Measurement | Result |
 | :--- | :--- |
 | Boot to first frame | Pending |
+| Boot to first SNTP response | Not instrumented yet; early boot lines are lost because the monitor attaches after flash. Add an explicit boot timestamp before recording. |
 | Full 288-pixel frame time | Pending |
 | RMT inter-chunk gap | Pending |
 | Flash use with timezone + OTA partitions | Pending |
 | RAM use | Pending |
-| Wi-Fi reconnect time | Pending |
+| Wi-Fi reconnect time | About 5 s after a forced disconnect, including the backoff |
 
 ## 4.8 Decision
 

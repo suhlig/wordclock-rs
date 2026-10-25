@@ -37,7 +37,7 @@ Run this gate after tasks 2 and 3 and before any hardware provisioning. The core
 - [x] 4.1 Confirm that `clock`, `color`, and `frame` contain no `std`-only, Pi, ESP32-C3, SPI, RMT, or operating-system dependency; document the alloc boundary needed for a `no_std` build.
 - [x] 4.2 Install and verify the ESP32-C3 Rust toolchain: `espflash`, the `riscv32imc-unknown-none-elf` target, and a minimal `esp-hal` blink read over USB Serial/JTAG.
 - [ ] 4.3 Build an RMT WS2812 smoke test on the C3; use the on-board addressable LED if present, then an offcut strip through the level shifter once it arrives; verify GRB order and 288-pixel timing with the Pico analyzer.
-- [ ] 4.4 Implement Wi-Fi association and SNTP synchronization on the C3; verify the boot gate, reconnect after network loss, and periodic resynchronization.
+- [x] 4.4 Implement Wi-Fi association and SNTP synchronization on the C3; verify the boot gate, reconnect after network loss, and periodic resynchronization.
 - [x] 4.5 Implement the `Europe/Berlin` local-time and DST rule for the C3; compare it against `chrono-tz` on the host across the fixture and future transition dates through 2030.
 - [ ] 4.6 Render the 06:30 fixture frame on the C3 and compare its indices and corrected colors with the host simulator.
 - [ ] 4.7 Measure boot-to-first-frame time, frame time, RMT inter-chunk gaps, flash and RAM use with the timezone rule and OTA partitions, and Wi-Fi recovery time; record the numbers in `design.md` D16.
