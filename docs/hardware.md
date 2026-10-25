@@ -183,6 +183,14 @@ The released `sigrok-cli` 0.7.2 and PulseView 0.4.2 do not include the driver. R
 
 Capture without a trigger. The `raspberrypi-pico` driver switches to USB streaming for triggered captures, which overflows at 24 MHz; the untriggered fixed-depth path runs at full rate.
 
+`scripts/capture-ws2812.sh` wraps the whole recipe: it finds the Pico's port, captures, decodes, reports the longest low below the 50 µs reset threshold and the number of reset gaps, and, given a time, checks the pixels against `examples/dump_frame.rs`. A capture can start mid-frame, so the frame is matched at any offset. Pass `--decode-only` to re-check an existing session file.
+
+```bash
+scripts/capture-ws2812.sh --time "15.07.2026 06:30" --seed 42
+```
+
+The two `sigrok-cli` calls behind it are:
+
 ```bash
 sigrok-cli -d raspberrypi-pico:conn=/dev/cu.usbmodemYYYY:serialcomm=115200/flow=0 \
   --config samplerate=24000000 --channels D2 --samples 380000 -o /tmp/ws2812.sr

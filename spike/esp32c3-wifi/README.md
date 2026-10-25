@@ -64,15 +64,15 @@ With the feature, the firmware forces a disconnect 15 seconds after each associa
 
 The `frame-loop` feature skips Wi-Fi and writes the 06:30 frame back-to-back with a 2 ms gap, so a fixed-depth capture always contains a whole frame. Clip the Pico H to GPIO2 directly; it is a 3.3 V signal, so the level shifter is not needed for timing work.
 
-Build the host client once with `scripts/setup-sigrok-pico.sh` and add `$HOME/opt/sigrok-pico/bin` to `PATH`. The released sigrok-cli and the Homebrew HEAD formula do not provide a working `raspberrypi-pico` driver.
+Build the host client once with `scripts/setup-sigrok-pico.sh`. The capture script uses `sigrok-cli` from `PATH` and falls back to `$HOME/opt/sigrok-pico/bin`; the released sigrok-cli and the Homebrew HEAD formula do not provide a working `raspberrypi-pico` driver.
 
 ```bash
 cargo build --release --features frame-loop
 espflash flash --chip esp32c3 --port /dev/cu.usbmodemXXXX target/riscv32imc-unknown-none-elf/release/esp32c3-wifi
-sigrok-cli -d raspberrypi-pico:conn=/dev/cu.usbmodemYYYY:serialcomm=115200/flow=0 \
-  --config samplerate=24000000 --channels D2 --samples 380000 -o /tmp/ws2812.sr
-sigrok-cli -i /tmp/ws2812.sr -P rgb_led_ws281x -A rgb_led_ws281x=rgb-vals
+scripts/capture-ws2812.sh --time "15.07.2026 06:30" --seed 42
 ```
+
+`frame-loop` renders 2026-07-15 06:30 with seed 42, which is what the command above passes to the simulator. The script captures, decodes, reports the timing, and checks all 288 pixels. `docs/hardware.md` lists the raw `sigrok-cli` calls it runs.
 
 `D2` is GPIO2 on the Pico. Do not use a trigger: the `raspberrypi-pico` driver switches to USB streaming for triggered captures and overflows at 24 MHz. Without a trigger it uses fixed-depth capture at full rate.
 
