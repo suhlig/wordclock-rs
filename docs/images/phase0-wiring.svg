@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1240" viewBox="0 0 1800 1240" role="img" aria-labelledby="t d">
+  <title id="t">Phase 0 bench wiring: SN74AHCT125N level shifter and WS2812 offcut</title>
+  <desc id="d">KiCad-style schematic for the cold wiring check. An ESP32-C3-DevKit-RUST-1 drives gate 1 of an SN74AHCT125N from GPIO3; the 5 V output passes through a 470 ohm resistor to the DIN of a short WS2812 strip. Unused gates are tied off, the 47 nF decouples VCC, and all grounds form one node. Power is off; the numbered checklist lists the continuity checks.</desc>
+
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="10" cy="10" r="0.9" fill="#DAD5C6"/>
+    </pattern>
+    <style>
+      text { font-family: Helvetica, Arial, "Liberation Sans", sans-serif; letter-spacing: 0.25px; }
+      .body   { fill: #FFFFC2; stroke: #7E0000; stroke-width: 2; }
+      .bodyp  { fill: #EDE9DC; stroke: #7E0000; stroke-width: 2; }
+      .sym    { fill: none;    stroke: #7E0000; stroke-width: 2; }
+      .plate  { fill: none;    stroke: #7E0000; stroke-width: 3.5; stroke-linecap: round; }
+      .wire   { fill: none;    stroke: #0B6E0B; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+      .pin    { fill: none;    stroke: #7E0000; stroke-width: 1.8; stroke-linecap: round; }
+      .tie    { fill: none;    stroke: #0B6E0B; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+      .nc     { fill: none;    stroke: #0000C0; stroke-width: 1.8; stroke-linecap: round; }
+      .junction { fill: #0B6E0B; }
+      .pinno  { font-size: 10px;  fill: #7E0000; }
+      .pinname{ font-size: 11px;  fill: #7E0000; }
+      .ref    { font-size: 12px;  fill: #008484; font-weight: bold; }
+      .val    { font-size: 11px;  fill: #008484; }
+      .net    { font-size: 11px;  fill: #000084; }
+      .netS   { font-size: 9.5px; fill: #000084; }
+      .note   { font-size: 9px;   fill: #6B6B6B; }
+      .warn   { font-size: 10px;  fill: #B00020; }
+      .check  { font-size: 10.5px; fill: #2B2B2B; }
+      .hdr    { font-size: 12.5px; fill: #2B2B2B; font-weight: bold; }
+      .tb     { font-size: 11px;   fill: #2B2B2B; }
+      .tbS    { font-size: 10.5px; fill: #2B2B2B; }
+    </style>
+  </defs>
+
+  <!-- sheet -->
+  <rect width="1800" height="1240" fill="#F7F5EF"/>
+  <rect width="1800" height="1240" fill="url(#grid)"/>
+
+  <!-- banner -->
+  <text x="60" y="72" style="font-size:22px; font-weight:bold; fill:#7E0000;">Phase 0 — bench wiring: level shifter + WS2812 offcut</text>
+  <text x="60" y="98" class="check" style="font-size:12px;">Power off. Buzzer/continuity only. Apply 5 V only after every box below is ticked.</text>
+
+  <!-- ============ wires ============ -->
+  <!-- +5 V rail: PS1 + -> up -> across -> down to J1 5V pin -->
+  <path class="wire" d="M 220 460 H 250 V 170 H 1500 V 350"/>
+  <!-- 0 V rail: PS1 - -> down -> across -> up to J1 GND pin -->
+  <path class="wire" d="M 220 560 H 285 V 980 H 1500 V 650"/>
+
+  <!-- U1 supply -->
+  <path class="wire" d="M 760 230 V 170"/>
+  <path class="wire" d="M 760 750 V 980"/>
+
+  <!-- C3 ground -->
+  <path class="wire" d="M 450 750 V 980"/>
+
+  <!-- C1 VCC tee -->
+  <path class="wire" d="M 675 225 H 760"/>
+
+  <!-- data path -->
+  <path class="wire" d="M 630 500 H 670"/>
+  <path class="wire" d="M 1090 500 H 1120"/>
+  <path class="wire" d="M 1240 500 H 1330"/>
+
+  <!-- enable tie-off stubs -->
+  <path class="tie" d="M 670 330 H 620"/>
+  <path class="tie" d="M 670 370 H 620"/>
+  <path class="tie" d="M 670 410 H 620"/>
+  <path class="tie" d="M 670 450 H 620"/>
+  <path class="tie" d="M 620 330 V 450"/>
+  <!-- spare input tie-off stubs -->
+  <path class="tie" d="M 670 550 H 620"/>
+  <path class="tie" d="M 670 600 H 620"/>
+  <path class="tie" d="M 670 650 H 620"/>
+  <path class="tie" d="M 620 550 V 650"/>
+
+  <!-- ============ PS1 bench supply ============ -->
+  <g>
+    <rect class="sym" x="60" y="400" width="160" height="220" rx="3"/>
+    <text x="72" y="430" class="ref">PS1</text>
+    <text x="72" y="450" class="val">bench 5 V</text>
+    <text x="72" y="468" class="val">2 A or more</text>
+    <text x="210" y="456" class="pinname" text-anchor="end">+5 V</text>
+    <text x="210" y="556" class="pinname" text-anchor="end">0 V</text>
+    <circle cx="220" cy="460" r="3.2" fill="#7E0000"/>
+    <circle cx="220" cy="560" r="3.2" fill="#7E0000"/>
+  </g>
+
+  <!-- ============ C3 source ============ -->
+  <g>
+    <rect class="body" x="300" y="400" width="300" height="320"/>
+    <text x="312" y="424" class="ref">C3</text>
+    <text x="312" y="442" class="val">ESP32-C3-DevKit-RUST-1</text>
+
+    <!-- right-edge pins -->
+    <path class="pin" d="M 600 440 H 630"/>
+    <path class="pin" d="M 600 472 H 630"/>
+    <path class="pin" d="M 600 500 H 630"/>
+    <text x="588" y="444" class="pinname" text-anchor="end">3V3</text>
+    <text x="588" y="476" class="pinname" text-anchor="end">5V</text>
+    <text x="588" y="504" class="pinname" text-anchor="end">GPIO3</text>
+
+    <!-- bottom-edge GND pin -->
+    <path class="pin" d="M 450 720 V 750"/>
+    <text x="450" y="712" class="pinname" text-anchor="middle">GND</text>
+
+    <!-- no-connects -->
+    <path class="nc" d="M 624 434 L 636 446 M 636 434 L 624 446"/>
+    <path class="nc" d="M 624 466 L 636 478 M 636 466 L 624 478"/>
+  </g>
+  <text x="300" y="388" class="warn">3V3 and 5V are no-connect: never apply 5 V to the C3</text>
+
+  <!-- ============ U1 SN74AHCT125N ============ -->
+  <g>
+    <rect class="body" x="700" y="260" width="360" height="460"/>
+
+    <text x="1048" y="290" class="ref" text-anchor="end">U1</text>
+    <text x="1048" y="308" class="val" text-anchor="end">SN74AHCT125N</text>
+
+    <!-- top / bottom supply pins -->
+    <path class="pin" d="M 760 260 V 230"/>
+    <path class="pin" d="M 760 720 V 750"/>
+    <text x="754" y="252" class="pinno" text-anchor="end">14</text>
+    <text x="766" y="280" class="pinname">VCC</text>
+    <text x="754" y="742" class="pinno" text-anchor="end">7</text>
+    <text x="766" y="712" class="pinname">GND</text>
+
+    <!-- left pins: enables then gate inputs -->
+    <path class="pin" d="M 700 330 H 670"/><text x="694" y="324" class="pinno" text-anchor="end">1</text><text x="708" y="334" class="pinname">1OE</text>
+    <path class="pin" d="M 700 370 H 670"/><text x="694" y="364" class="pinno" text-anchor="end">4</text><text x="708" y="374" class="pinname">2OE</text>
+    <path class="pin" d="M 700 410 H 670"/><text x="694" y="404" class="pinno" text-anchor="end">10</text><text x="708" y="414" class="pinname">3OE</text>
+    <path class="pin" d="M 700 450 H 670"/><text x="694" y="444" class="pinno" text-anchor="end">13</text><text x="708" y="454" class="pinname">4OE</text>
+
+    <path class="pin" d="M 700 500 H 670"/><text x="694" y="494" class="pinno" text-anchor="end">2</text><text x="708" y="504" class="pinname">1A</text>
+    <path class="pin" d="M 700 550 H 670"/><text x="694" y="544" class="pinno" text-anchor="end">5</text><text x="708" y="554" class="pinname">2A</text>
+    <path class="pin" d="M 700 600 H 670"/><text x="694" y="594" class="pinno" text-anchor="end">9</text><text x="708" y="604" class="pinname">3A</text>
+    <path class="pin" d="M 700 650 H 670"/><text x="694" y="644" class="pinno" text-anchor="end">12</text><text x="708" y="654" class="pinname">4A</text>
+
+    <!-- right pins: outputs -->
+    <path class="pin" d="M 1060 500 H 1090"/><text x="1066" y="494" class="pinno">3</text><text x="1052" y="504" class="pinname" text-anchor="end">1Y</text>
+    <path class="pin" d="M 1060 550 H 1090"/><text x="1066" y="544" class="pinno">6</text><text x="1052" y="554" class="pinname" text-anchor="end">2Y</text>
+    <path class="pin" d="M 1060 600 H 1090"/><text x="1066" y="594" class="pinno">8</text><text x="1052" y="604" class="pinname" text-anchor="end">3Y</text>
+    <path class="pin" d="M 1060 650 H 1090"/><text x="1066" y="644" class="pinno">11</text><text x="1052" y="654" class="pinname" text-anchor="end">4Y</text>
+
+
+  </g>
+
+  <!-- no-connect on spare outputs -->
+  <path class="nc" d="M 1084 544 L 1096 556 M 1096 544 L 1084 556"/>
+  <path class="nc" d="M 1084 594 L 1096 606 M 1096 594 L 1084 606"/>
+  <path class="nc" d="M 1084 644 L 1096 656 M 1096 644 L 1084 656"/>
+
+  <!-- ============ C1 47 nF decoupling ============ -->
+  <g>
+    <path class="wire" d="M 600 225 H 655"/>
+    <path class="plate" d="M 655 210 V 240"/>
+    <path class="plate" d="M 675 210 V 240"/>
+    <text x="665" y="202" class="ref" text-anchor="middle">C1</text>
+    <text x="665" y="258" class="val" text-anchor="middle">47 nF</text>
+    <text x="600" y="300" class="note">at U1 pins 14 and 7</text>
+    <!-- GND symbol -->
+    <path class="wire" d="M 600 225 V 245"/>
+    <path class="pin" d="M 586 245 H 614 M 590 251 H 610 M 594 257 H 606"/>
+  </g>
+
+  <!-- ============ tie-off grounds ============ -->
+  <g>
+    <path class="wire" d="M 620 450 V 470"/>
+    <path class="pin" d="M 606 470 H 634 M 610 476 H 630 M 614 482 H 626"/>
+
+    <path class="wire" d="M 620 650 V 670"/>
+    <path class="pin" d="M 606 670 H 634 M 610 676 H 630 M 614 682 H 626"/>
+  </g>
+
+  <!-- ============ R1 470 ohm ============ -->
+  <g>
+    <rect class="sym" x="1120" y="480" width="120" height="40"/>
+    <text x="1180" y="472" class="ref" text-anchor="middle">R1</text>
+    <text x="1180" y="542" class="val" text-anchor="middle">470 Ω</text>
+    <text x="1350" y="562" class="note" text-anchor="end">at pin 3, not at the supply</text>
+  </g>
+
+  <!-- ============ J1 WS2812 offcut ============ -->
+  <g>
+    <rect class="bodyp" x="1360" y="380" width="300" height="240"/>
+    <text x="1372" y="404" class="ref">J1</text>
+    <text x="1372" y="422" class="val">WS2812 offcut</text>
+
+    <!-- pins -->
+    <path class="pin" d="M 1500 380 V 350"/>
+    <text x="1508" y="362" class="pinname">5V</text>
+    <path class="pin" d="M 1500 620 V 650"/>
+    <text x="1508" y="642" class="pinname">GND</text>
+    <path class="pin" d="M 1360 500 H 1330"/>
+    <text x="1370" y="492" class="pinname">DIN</text>
+
+    <!-- internal data chain -->
+    <path class="wire" d="M 1360 500 H 1400"/>
+    <rect class="body" x="1400" y="483" width="34" height="34"/>
+    <rect class="body" x="1448" y="483" width="34" height="34"/>
+    <rect class="body" x="1496" y="483" width="34" height="34"/>
+    <rect class="body" x="1544" y="483" width="34" height="34"/>
+    <path class="wire" d="M 1434 500 H 1448"/>
+    <path class="wire" d="M 1482 500 H 1496"/>
+    <path class="wire" d="M 1530 500 H 1544"/>
+    <path class="wire" d="M 1578 500 H 1590"/>
+    <text x="1408" y="536" class="note">D1</text>
+    <text x="1456" y="536" class="note">D2</text>
+    <text x="1504" y="536" class="note">D3</text>
+    <text x="1552" y="536" class="note">D4</text>
+    <text x="1596" y="505" class="pinname">…</text>
+    <text x="1604" y="540" class="note">DOUT</text>
+    <text x="1604" y="556" class="note">leave open</text>
+  </g>
+  <text x="1330" y="546" class="warn" text-anchor="end">DIN, not DOUT</text>
+
+  <!-- ============ C2 bulk (optional on the offcut) ============ -->
+  <g>
+    <path class="wire" d="M 1700 300 V 520"/>
+    <path class="plate" d="M 1680 520 H 1720"/>
+    <path class="plate" d="M 1680 540 H 1720"/>
+    <path class="wire" d="M 1700 540 V 780"/>
+    <!-- +5 V power symbol -->
+    <path class="pin" d="M 1700 300 V 286"/>
+    <path class="pin" d="M 1691 286 H 1709"/>
+    <text x="1712" y="290" class="net">+5 V</text>
+    <!-- GND symbol -->
+    <path class="pin" d="M 1686 780 H 1714 M 1690 786 H 1710 M 1694 792 H 1706"/>
+    <text x="1722" y="792" class="net">0 V</text>
+
+    <text x="1726" y="516" class="ref">C2</text>
+    <text x="1726" y="534" class="val">1000 µF</text>
+    <text x="1726" y="552" class="note">optional on</text>
+    <text x="1726" y="566" class="note">the offcut</text>
+  </g>
+
+  <!-- ============ junctions ============ -->
+  <circle class="junction" cx="760" cy="170" r="4.5"/>
+  <circle class="junction" cx="760" cy="225" r="4.5"/>
+  <circle class="junction" cx="760" cy="980" r="4.5"/>
+  <circle class="junction" cx="450" cy="980" r="4.5"/>
+  <circle class="junction" cx="620" cy="370" r="3.5"/>
+  <circle class="junction" cx="620" cy="410" r="3.5"/>
+  <circle class="junction" cx="620" cy="600" r="3.5"/>
+
+  <!-- ============ net labels ============ -->
+  <text x="280" y="158" class="net">+5 V — LED / bench supply</text>
+  <text x="300" y="1000" class="net">0 V — one node</text>
+  <text x="1100" y="488" class="netS">5 V</text>
+
+  <!-- ============ checklist ============ -->
+  <g>
+    <rect x="60" y="1010" width="700" height="210" fill="#FCFBF6" stroke="#B9B3A2" stroke-width="1"/>
+    <text x="72" y="1033" class="hdr">Phase 0 — cold checks, DMM continuity, power off</text>
+    <text x="72" y="1060" class="check">[ ] 0 Ω  U1-7 · C3 GND · J1 0 V · PS1 − · C1 · C2</text>
+    <text x="72" y="1082" class="check">[ ] 0 Ω  U1-1, -4, -10, -13, -5, -9, -12  ↔  GND</text>
+    <text x="72" y="1104" class="check">[ ] 0 Ω  U1-3  ↔  R1  ↔  J1 DIN      (DIN, not DOUT)</text>
+    <text x="72" y="1126" class="check">[ ] 0 Ω  U1-2  ↔  C3 GPIO3</text>
+    <text x="72" y="1148" class="check">[ ] open  +5 V  ↔  0 V      (no short before power-up)</text>
+    <text x="72" y="1170" class="check">[ ] C1 and C2: stripe and short lead to 0 V</text>
+    <text x="72" y="1192" class="check">[ ] +5 V only at U1-14, C1, C2, J1 V+</text>
+    <text x="72" y="1214" class="check">[ ] no 5 V on the C3 5V or 3V3 pin</text>
+  </g>
+
+  <!-- ============ DIL-14 socket inset ============ -->
+  <g>
+    <rect x="800" y="1010" width="280" height="210" fill="#FCFBF6" stroke="#B9B3A2" stroke-width="1"/>
+    <text x="812" y="1033" class="hdr">U1 — DIL-14, top view</text>
+
+    <rect class="body" x="880" y="1050" width="120" height="135" rx="2"/>
+    <path class="pin" d="M 930 1050 A 10 10 0 0 1 950 1050"/>
+
+    <!-- left pins 1..7 -->
+    <path class="pin" d="M 880 1065 H 860"/><text x="874" y="1061" class="pinno" text-anchor="end" style="fill:#0B6E0B; font-weight:bold;">1</text><text x="854" y="1068" class="note" text-anchor="end" style="fill:#0B6E0B;">1OE</text>
+    <path class="pin" d="M 880 1083 H 860"/><text x="874" y="1079" class="pinno" text-anchor="end" style="fill:#0B6E0B; font-weight:bold;">2</text><text x="854" y="1086" class="note" text-anchor="end" style="fill:#0B6E0B;">1A</text>
+    <path class="pin" d="M 880 1101 H 860"/><text x="874" y="1097" class="pinno" text-anchor="end" style="fill:#0B6E0B; font-weight:bold;">3</text><text x="854" y="1104" class="note" text-anchor="end" style="fill:#0B6E0B;">1Y</text>
+    <path class="pin" d="M 880 1119 H 860"/><text x="874" y="1115" class="pinno" text-anchor="end">4</text>
+    <path class="pin" d="M 880 1137 H 860"/><text x="874" y="1133" class="pinno" text-anchor="end">5</text>
+    <path class="pin" d="M 880 1155 H 860"/><text x="874" y="1151" class="pinno" text-anchor="end">6</text>
+    <path class="pin" d="M 880 1173 H 860"/><text x="874" y="1169" class="pinno" text-anchor="end" style="fill:#0B6E0B; font-weight:bold;">7</text><text x="854" y="1176" class="note" text-anchor="end" style="fill:#0B6E0B;">GND</text>
+
+    <!-- right pins 14..8 -->
+    <path class="pin" d="M 1000 1065 H 1020"/><text x="1006" y="1061" class="pinno" style="fill:#0B6E0B; font-weight:bold;">14</text><text x="1026" y="1068" class="note" style="fill:#0B6E0B;">VCC</text>
+    <path class="pin" d="M 1000 1083 H 1020"/><text x="1006" y="1079" class="pinno">13</text>
+    <path class="pin" d="M 1000 1101 H 1020"/><text x="1006" y="1097" class="pinno">12</text>
+    <path class="pin" d="M 1000 1119 H 1020"/><text x="1006" y="1115" class="pinno">11</text>
+    <path class="pin" d="M 1000 1137 H 1020"/><text x="1006" y="1133" class="pinno">10</text>
+    <path class="pin" d="M 1000 1155 H 1020"/><text x="1006" y="1151" class="pinno">9</text>
+    <path class="pin" d="M 1000 1173 H 1020"/><text x="1006" y="1169" class="pinno">8</text>
+  </g>
+
+  <!-- ============ title block ============ -->
+  <g>
+    <rect x="1100" y="1010" width="680" height="210" fill="#FCFBF6" stroke="#7E0000" stroke-width="1.5"/>
+    <path class="pin" d="M 1100 1085 H 1780"/>
+    <path class="pin" d="M 1100 1145 H 1780"/>
+    <path class="pin" d="M 1440 1085 V 1220"/>
+
+    <text x="1112" y="1042" style="font-size:16px; font-weight:bold; fill:#7E0000;">Phase 0 — bench wiring</text>
+    <text x="1112" y="1064" class="tbS">SN74AHCT125N level shifter + WS2812 offcut</text>
+
+    <text x="1112" y="1108" class="tb">Date: 2026-10-31</text>
+    <text x="1112" y="1128" class="tb">Rev: A</text>
+    <text x="1452" y="1108" class="tb">Sheet: 1/1</text>
+    <text x="1452" y="1128" class="tb">File: phase0-wiring.svg</text>
+
+    <text x="1112" y="1168" class="tbS">Hand-authored SVG, KiCad default palette</text>
+    <text x="1112" y="1188" class="tbS">Not to scale — wiring reference only</text>
+    <text x="1452" y="1168" class="tbS">All GND symbols are one node</text>
+    <text x="1452" y="1188" class="tbS">Checks refer to physical pin numbers</text>
+  </g>
+</svg>
