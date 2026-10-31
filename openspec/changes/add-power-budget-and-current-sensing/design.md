@@ -6,7 +6,7 @@ Decision numbers here are local to this change; `replace-fadecandy-with-rust` us
 
 The build is a 300-pixel WS2812B strip (288 logical plus 12 padding) on a 60 W, 5 V supply, which is 12 A continuous. At the datasheet's 60 mA per lit pixel an all-white frame commands about 18 A; a normal clock frame lights 11–39 pixels, roughly 0.7–2.3 A plus about 0.3 A of quiescent current across 300 pixels. So the exposure is not steady state but any frame that lights the strip.
 
-What already exists: the strip is fed through per-row rails in 1.5 mm² solid copper, and an ACS712-20A Hall sensor is installed in the main rail ahead of the distribution. The host-independent core already ends in a corrected `Frame` and a `Display` trait, and the ESP32-C3 has ADC1 on GPIO0–GPIO4 with GPIO3 now carrying the strip data.
+What already exists: the strip is fed through per-row rails in 1.5 mm² solid copper, and an ACS712-20A Hall sensor is installed in the LED branch, so it measures the strip and not the controller. The host-independent core already ends in a corrected `Frame` and a `Display` trait, and the ESP32-C3 has ADC1 on GPIO0–GPIO4 with GPIO3 now carrying the strip data.
 
 Supplier reality shaped one decision: an INA226, INA260 or INA228 could not be bought from the hobbyist shops checked (BerryBase, Reichelt, Conrad, Pollin, Botland), and Mouser and TME blocked automated checks. The common INA219 breakout carries a 0.1 Ω shunt rated 3.2 A, which dissipates about 14 W at 12 A and is unusable here.
 
@@ -83,7 +83,9 @@ Alternatives: feeding 3.3 V to the sensor (rejected, below its 4.5 V minimum), c
 
 The ACS712 is ratiometric: zero is VCC/2 and sensitivity scales with VCC. Powered from the LED rail, a 0.2 V sag moves the zero by 100 mV — a full amp of apparent current — and compounds with the sensitivity error to roughly 15 % low at 9 A. Taking VCC from the C3's own 5 V pin costs 10 mA and keeps the zero stable; the current path stays isolated, so there is no penalty.
 
-Alternatives: powering from the measured rail with a second ADC channel measuring VCC and compensating (workable, and the refinement to reach for if drift shows up), or zeroing on every boot without compensating (rejected, boot happens rarely and the rail state varies).
+If the build instead shares one 5 V supply across the controller, the sensor and the strip, this choice disappears: the sensor's VCC is the rail it measures, and the second ADC channel on VCC becomes required rather than optional. Measuring VCC on that channel makes the compensation exact, because both the zero and the sensitivity are known functions of the same node.
+
+Alternatives: powering from the measured rail with a second ADC channel measuring VCC and compensating (the single-supply case, and the refinement to reach for if drift shows up), or zeroing on every boot without compensating (rejected, boot happens rarely and the rail state varies).
 
 ### D7: Slow outer loop with hysteresis, never per frame
 
@@ -104,7 +106,8 @@ Alternatives: replacing all rails with 2.5 mm² (rejected, no measurable benefit
 ## Risks / Trade-offs
 
 - **Estimate error of ±10–20 %** → the 9 A limit plus a 95 % margin keeps the command under 12 A even at the pessimistic end, and `k_drive` is calibrated from the strip rather than assumed.
-- **Ratiometric drift if the sensor is mis-powered** → D6 powers it from a stable 5 V; if drift still shows up, add a second ADC channel on VCC and compensate.
+- **Ratiometric drift if the sensor is mis-powered** → D6 powers it from a stable 5 V; on a single 5 V rail, add the second ADC channel on VCC and compensate.
+- **Sensor placement** → the shunt sits in the LED branch, so the controller's own draw is not counted and the estimate and measurement describe the same load; keep it there if the distribution is reworked.
 - **C3 ADC noise and non-linearity** → average 32–64 samples, two-point calibrate, and accept 0.1–0.2 A effective resolution; the M5Stack INA226-10A is the escape hatch.
 - **The ACS712 module's own current path may be rated below the die** → check terminal temperature after a minute of all-white at 12–17 A; the die's 1.2 mΩ is not the module's limitation.
 - **The limiter hides a real fault** → it bounds the command, not the load; supply OCP and a fuse stay in the design, and engaging the limiter is logged rather than silent.

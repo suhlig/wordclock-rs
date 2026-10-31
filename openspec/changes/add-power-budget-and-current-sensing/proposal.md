@@ -2,7 +2,7 @@
 
 ## Why
 
-The clock runs from a 60 W, 5 V supply — 12 A continuous — while the 300-pixel WS2812B strip can draw roughly 18 A at full white. Normal operation is nowhere near that: a clock frame lights 11–39 pixels, about 2–3 A including quiescent current. The exposure is the exception — the all-on test pattern in the hardware guide, a future feature that lights the whole strip, or a rendering bug — and no code path today bounds it. The build also already carries an ACS712-20A Hall sensor in the main rail, so the actual current can be observed without buying anything. Encoding the limit in firmware, and using the existing sensor to confirm it, turns an assumption into a checkable property.
+The clock runs from a 60 W, 5 V supply — 12 A continuous — while the 300-pixel WS2812B strip can draw roughly 18 A at full white. Normal operation is nowhere near that: a clock frame lights 11–39 pixels, about 2–3 A including quiescent current. The exposure is the exception — the all-on test pattern in the hardware guide, a future feature that lights the whole strip, or a rendering bug — and no code path today bounds it. The build also already carries an ACS712-20A Hall sensor in the LED branch, so the actual current can be observed without buying anything. Encoding the limit in firmware, and using the existing sensor to confirm it, turns an assumption into a checkable property.
 
 ## What Changes
 
