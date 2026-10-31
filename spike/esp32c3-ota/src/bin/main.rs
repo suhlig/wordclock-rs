@@ -21,6 +21,8 @@
 #![deny(clippy::large_stack_frames)]
 
 use core::fmt::Write as _;
+#[cfg(feature = "strip-check")]
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use alloc::string::String;
 
@@ -68,8 +70,10 @@ macro_rules! mk_static {
 
 /// Bump this before every OTA experiment. The on-board LED blinks it at boot
 /// and `GET /` reports it, which is how an update is verified without USB.
-/// It sits at 2 because the update path was exercised twice on the bench.
-const REVISION: u32 = 2;
+/// It sits at 6 because the update path was exercised three times on the bench,
+/// once more with the strip check, once more after giving the strip check a
+/// full-length frame, and once more to dim it for night testing.
+const REVISION: u32 = 6;
 
 const OTA_PORT: u16 = 3232;
 const HEADER_MAX: usize = 1024;
@@ -81,18 +85,58 @@ const PASSWORD: &str = env!("WORDCLOCK_WIFI_PASSWORD");
 const STATIC_IP: &str = env!("WORDCLOCK_OTA_IP");
 const STATIC_GATEWAY: &str = env!("WORDCLOCK_OTA_GATEWAY");
 
-// Status colours, kept dim: this is the on-board WS2812, not the clock.
-const LED_BOOT: RGB8 = RGB8::new(0, 0, 32);
-const LED_CONNECTING: RGB8 = RGB8::new(32, 16, 0);
-const LED_READY: RGB8 = RGB8::new(0, 24, 0);
-const LED_ERROR: RGB8 = RGB8::new(32, 0, 0);
+// Status colours, kept dim: this is the on-board WS2812, not the clock. They
+// were halved after a night session, and the strip pattern went to a fifth.
+const LED_BOOT: RGB8 = RGB8::new(0, 0, 16);
+const LED_CONNECTING: RGB8 = RGB8::new(16, 8, 0);
+const LED_READY: RGB8 = RGB8::new(0, 12, 0);
+const LED_ERROR: RGB8 = RGB8::new(16, 0, 0);
 const LED_OFF: RGB8 = RGB8::new(0, 0, 0);
+const LED_BLINK: RGB8 = RGB8::new(12, 12, 12);
 
 /// The first byte of every ESP application image.
 const ESP_IMAGE_MAGIC: u8 = 0xE9;
 
 type Leds<'a> =
     RmtSmartLeds<'a, { buffer_size::<RGB8>(1) }, esp_hal::Blocking, RGB8, color_order::Grb>;
+
+/// The offcut is 35 pixels. A frame must always cover the whole strip: a frame
+/// that stops early leaves the remaining pixels at whatever they latched when
+/// the rail came up, which is exactly how stray red pixels survive a reboot.
+#[cfg(feature = "strip-check")]
+const STRIP_LENGTH: usize = 35;
+
+/// How many pixels the check actually lights. Five is enough to see the pattern
+/// and makes a shifted or reversed strip obvious.
+#[cfg(feature = "strip-check")]
+const STRIP_CHECK_PIXELS: usize = 5;
+
+/// Night-time levels: a fifth of the 64 and 48 this check started with. The
+/// strip sits in a dark room and full colour levels are painful to look at.
+#[cfg(feature = "strip-check")]
+const STRIP_PRIMARY: u8 = 13;
+#[cfg(feature = "strip-check")]
+const STRIP_WHITE: u8 = 10;
+
+#[cfg(feature = "strip-check")]
+type StripLeds<'a> = RmtSmartLeds<
+    'a,
+    { buffer_size::<RGB8>(STRIP_LENGTH) },
+    esp_hal::Blocking,
+    RGB8,
+    color_order::Grb,
+>;
+
+/// Whether the strip driver was created, so the status page can tell a wiring
+/// problem apart from a firmware that does not drive the strip at all.
+#[cfg(feature = "strip-check")]
+static STRIP_READY: AtomicBool = AtomicBool::new(false);
+
+/// The strip driver owns an 842-code waveform buffer. Keeping it in a static
+/// rather than inside the task future keeps the executor's task pool small and
+/// makes the buffer's lifetime obvious.
+#[cfg(feature = "strip-check")]
+static STRIP: StaticCell<StripLeds<'static>> = StaticCell::new();
 
 /// A byte buffer with flash-friendly alignment, so the flash layer never has
 /// to stage a copy through its own sector buffer.
@@ -333,6 +377,11 @@ async fn receive_image(
     Ok(upload.offset)
 }
 
+#[allow(
+    clippy::large_stack_frames,
+    reason = "a handful of write! calls and their format temporaries, on the server \
+    path where the stack is not the constraint"
+)]
 fn status_document(
     flash: &mut FlashStorage<'static>,
     partition_buffer: &mut Aligned<PARTITION_TABLE_MAX_LEN>,
@@ -347,6 +396,7 @@ fn status_document(
         "heap_used={} heap_max={} heap_size={}",
         stats.current_usage, stats.max_usage, stats.size
     );
+    let _ = writeln!(document, "strip_check={}", strip_state());
 
     match running_slot(flash, partition_buffer) {
         Ok(slot) => {
@@ -388,6 +438,24 @@ fn describe<T: core::fmt::Debug>(value: Option<T>) -> String {
         // and not an error.
         None => "unset".into(),
         Some(value) => alloc::format!("{value:?}"),
+    }
+}
+
+/// `off` when this image has no strip check, `failed` when the RMT channel could
+/// not be set up, `on` when it is blinking.
+fn strip_state() -> &'static str {
+    #[cfg(feature = "strip-check")]
+    {
+        if STRIP_READY.load(Ordering::Relaxed) {
+            "on"
+        } else {
+            "failed"
+        }
+    }
+
+    #[cfg(not(feature = "strip-check"))]
+    {
+        "off"
     }
 }
 
@@ -721,15 +789,53 @@ async fn main(spawner: Spawner) -> ! {
         )
         .expect("Failed to initialize the status LED");
 
+    // Channel 1 keeps the on-board indicator working: both drivers ask for a
+    // single RMT memory block, which is what leaves the other channel usable.
+    // A failure here must not take the OTA server down with it, because the
+    // only way back in is over the air.
+    #[cfg(feature = "strip-check")]
+    let strip = match RmtSmartLeds::<
+        { buffer_size::<RGB8>(STRIP_LENGTH) },
+        _,
+        RGB8,
+        color_order::Grb,
+    >::new_with_memsize(
+        esp_hal_smartled::WS2812_TIMING,
+        rmt.channel1,
+        peripherals.GPIO3,
+        1,
+        frequency,
+    ) {
+        Ok(strip) => {
+            STRIP_READY.store(true, Ordering::Relaxed);
+            Some(strip)
+        }
+        Err(error) => {
+            error!("strip check unavailable: {error:?}");
+            None
+        }
+    };
+
     set_led(&mut led, LED_BOOT);
 
     // The revision blink is the only update indicator when the board runs from
     // the 5 V rail with no USB and therefore no serial console.
     for _ in 0..REVISION {
-        set_led(&mut led, RGB8::new(24, 24, 24));
+        set_led(&mut led, LED_BLINK);
         Timer::after(Duration::from_millis(150)).await;
         set_led(&mut led, LED_OFF);
         Timer::after(Duration::from_millis(250)).await;
+    }
+
+    #[cfg(feature = "strip-check")]
+    if let Some(strip) = strip {
+        let strip = STRIP.init(strip);
+
+        // Clear the whole strip before anything else, so no pixel keeps a colour
+        // it latched while the rail was still coming up.
+        let _ = strip.write([RGB8::new(0, 0, 0); STRIP_LENGTH]);
+
+        spawner.spawn(strip_check(strip).expect("failed to spawn the strip check"));
     }
 
     println!(
@@ -859,6 +965,46 @@ async fn connection(mut controller: WifiController<'static>) {
 
         Timer::after(Duration::from_secs(5)).await;
     }
+}
+
+/// Wiring check for the offcut strip on GPIO3: the primaries, a dim white, a
+/// single-pixel index check, then off. It runs beside the OTA server so the
+/// image can be replaced over the air from a phone or a shell.
+#[cfg(feature = "strip-check")]
+#[embassy_executor::task]
+async fn strip_check(strip: &'static mut StripLeds<'static>) {
+    loop {
+        for colour in [
+            RGB8::new(STRIP_PRIMARY, 0, 0),
+            RGB8::new(0, STRIP_PRIMARY, 0),
+            RGB8::new(0, 0, STRIP_PRIMARY),
+            RGB8::new(STRIP_WHITE, STRIP_WHITE, STRIP_WHITE),
+        ] {
+            write_check(strip, colour, STRIP_CHECK_PIXELS);
+            Timer::after(Duration::from_millis(500)).await;
+        }
+
+        // Only the first pixel, so a strip wired in reverse or shifted by one
+        // is visible rather than plausible.
+        write_check(strip, RGB8::new(STRIP_WHITE, STRIP_WHITE, STRIP_WHITE), 1);
+        Timer::after(Duration::from_millis(500)).await;
+
+        write_check(strip, RGB8::new(0, 0, 0), 0);
+        Timer::after(Duration::from_millis(500)).await;
+    }
+}
+
+/// Writes a full-length frame with `count` lit pixels at the head and the rest
+/// black. Always full length: a short frame leaves the tail untouched.
+#[cfg(feature = "strip-check")]
+fn write_check(strip: &mut StripLeds<'_>, colour: RGB8, count: usize) {
+    let mut frame = [RGB8::new(0, 0, 0); STRIP_LENGTH];
+
+    for pixel in frame.iter_mut().take(count) {
+        *pixel = colour;
+    }
+
+    let _ = strip.write(frame);
 }
 
 #[embassy_executor::task]
