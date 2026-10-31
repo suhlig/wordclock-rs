@@ -8,6 +8,10 @@ version      = "0.1.0"
 name = "esp32c3-frame"
 path = "./src/bin/main.rs"
 
+[[bin]]
+name = "esp32c3-colors"
+path = "./src/bin/display.rs"
+
 [dependencies]
 esp-hal = { version = "~1.2.2", features = ["esp32c3", "log-04"] }
 
@@ -21,6 +25,8 @@ esp-backtrace = { version = "0.20.0", features = [
   "println",
 ] }
 esp-println = { version = "0.18.0", features = ["esp32c3", "log-04"] }
+esp-hal-smartled = { version = "0.18.0", features = ["esp32c3"] }
+smart-leds = "0.4.0"
 
 # The core modules used by the host, compiled without std for the C3.
 chrono   = { version = "0.4", default-features = false, features = ["alloc"] }
