@@ -1,12 +1,12 @@
 # wordclock-rs
 
 > [!WARNING]
-> **One 5 V supply, never two.** The finished clock is powered from a single 5 V supply that feeds the ESP32, the current sensor, and the LED strip. Power enters the ESP32 at the **`5V` pin, header pin 19** on the DevKit-RUST-1 (other boards label the same pin `VIN`).
+> **One 5 V supply, never two.** The finished clock is powered from a single 5 V supply that feeds the ESP32, the current sensor, and the LED strip. Power enters the ESP32 at the pin **labelled `5V` on the silkscreen**, header position 19 in the 28-pin numbering (other boards label the same pin `VIN`). That is a power pin with no GPIO number: do not confuse it with **GPIO19**, which is USB D+ on header position 25 and must never see 5 V.
 >
 > - **Never connect USB while the 5 V rail is powered.** VBUS and the `5V` pin are the same node, so you would be paralleling two supplies with no back-feed protection.
 > - **Never leave USB connected with the 5 V rail switched off.**
 > - **Firmware updates go over OTA**, so the built clock needs neither USB nor a serial console. See `spike/esp32c3-ota` for the prototype and the `curl` command.
-> - **Never feed the `3V3` pin (pin 2).** It is an output.
+> - **Never feed the `3V3` pin.** It is an output.
 >
 > First flash and recovery are the exceptions; for those, unplug the 5 V rail first, or use a charge-only cable with the VBUS wire cut. The reasoning is design decision D9 in `openspec/changes/add-power-budget-and-current-sensing/design.md`.
 

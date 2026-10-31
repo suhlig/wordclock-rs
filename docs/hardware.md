@@ -15,6 +15,7 @@ Reused from the Fadecandy build: Raspberry Pi 3B, MeanWell 5 V supply, 300-LED W
 | SN74AHCT125N, DIL-14 | 2 | `SN74AHCT125N` | €0.54 |
 | IC socket, 14-pin, THT | 1 | `ICS-14` | €0.96 |
 | 470 Ω, 1/4 W, 1 % | 5 | `MSW470R.25` | €0.05 |
+| 10 kΩ, 1/4 W, 1 % | 1 | — | — |
 | 47 nF, 50 V ceramic, THT 2.54 mm | 5 | `KEK47N50VCC` | €0.05 |
 | 1000 µF, 16 V radial, 105 °C | 2 | `ELK1M16VAWH` | €0.29 |
 | Perfboard, 5×7 cm | 1 | `PBS-5X7` | €0.30 |
@@ -26,6 +27,8 @@ Reused from the Fadecandy build: Raspberry Pi 3B, MeanWell 5 V supply, 300-LED W
 | Fuse holder, 5×20 mm (optional) | 1 | `SIH-32A2A` | €1.40 |
 
 Prices and availability were checked on 2026-10-24. BerryBase has no minimum order value, ships DHL within Germany for €4.95, and waives shipping from €200.
+
+The 10 kΩ is the pull-down on the shifter's signal input described under *Wiring*. Any 1/4 W part will do; it is listed without a SKU because it is the sort of thing that is already in a parts drawer.
 
 The 47 nF decoupling capacitor is a substitution, not the nominal value. A 100 nF part is equally correct and is stocked by Reichelt as `KERKO 100N` for €0.04; nothing else in the build changes.
 
@@ -82,6 +85,7 @@ Connection list:
 | From | To | Note |
 | :--- | :--- | :--- |
 | Pi GPIO10, physical pin 19 | 125 pin 2 (1A) | 3.3 V SPI data |
+| 125 pin 2 (1A) | 10 kΩ to GND | holds the strip's DIN low until the host drives the line |
 | 125 pin 3 (1Y) | 470 Ω, then strip DIN | 5 V data |
 | 125 pin 1 (1OE) | GND | enable gate 1 |
 | 125 pin 14 (VCC) | LED 5 V | same rail as the strip |
@@ -92,6 +96,10 @@ Connection list:
 | 1000 µF | strip 5 V ↔ 0 V | at the first LED, mind the polarity |
 
 Unused CMOS inputs must not float: tie the three spare gate inputs to ground and their enables low. Leaving them open causes oscillation and needless current.
+
+The signal input needs the same treatment, because the host's pin is unconfigured from reset until its firmware sets it up — a few hundred milliseconds in which the shifter's input floats and its output can even oscillate. Without the 10 kΩ pull-down on pin 2, the strip latches that noise at power-up: on the C3 bench build, two of five power-ups flashed the whole strip, once red and once green. The colour varies because the strip frames the same high-then-low burst at different bit offsets; red is `0x00FF00` in GRB order, green is `0xFF0000`, so it is noise, not a frame the firmware sent. The pull-down holds DIN low through the whole window, so the strip comes up dark. That last part is reasoning from the cause, not a measurement: the two-of-five run was made without the resistor fitted, and the confirmation run is still to come.
+
+The firmware half of the same problem is that a WS2812 keeps its latch until it receives data, so the first frame after boot must cover **every** pixel and be black. The Wi-Fi spike already writes a neutral all-black first frame for the SNTP gate; this is a second, independent reason for it.
 
 Put the 470 Ω as close to pin 3 as the layout allows. Keep the data lead short; if it must be longer than roughly 30 cm, run it as a twisted pair with a ground return.
 
@@ -211,9 +219,10 @@ The strip and the level shifter share the LED 5 V rail; the Pi keeps its own sup
 
 The C3 build goes further and drops the second supply: one 5 V rail feeds the controller, the current sensor, and the strip.
 
-- Feed the C3 at its **`5V` pin, header pin 19** on the DevKit-RUST-1; boards with other silkscreens call the same pin `VIN`. Never feed `3V3` (pin 2); it is an output.
+- Feed the C3 at the pin **labelled `5V`** on the silkscreen (header position 19 in the 28-pin numbering); boards with other silkscreens call the same pin `VIN`.
+- That pin has no GPIO number. `GPIO19` is USB D+ on header position 25, and `3V3` is a regulated output: neither may be fed 5 V.
 - **Never connect USB while the rail is powered**, and never leave USB connected with the rail off. VBUS and `5V` are the same node, so two supplies would be paralleled with no back-feed protection.
-- Put 100 µF and 100 nF from `5V` to `GND` at the board, and tap the rail near the supply rather than at the far end. The C3's Wi-Fi transmit peak is about 335 mA and should not have to travel through the LED distribution.
+- Put bulk capacitance plus 100 nF from `5V` to `GND` at the board: at least 100 µF, and the prototype uses 1000 µF. Tap the rail near the supply rather than at the far end. The C3's Wi-Fi transmit peak is about 335 mA and should not have to travel through the LED distribution.
 - Firmware updates go over OTA, so the built clock needs neither USB nor a console. `spike/esp32c3-ota` is the prototype of that path and `spike/esp32c3-ota/README.md` has the commands.
 
 The reasoning, including why a series diode does not substitute for a power mux, is design decision D9 in `openspec/changes/add-power-budget-and-current-sensing/design.md`.

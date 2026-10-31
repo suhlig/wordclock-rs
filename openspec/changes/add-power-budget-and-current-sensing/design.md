@@ -113,9 +113,10 @@ The cost is one hard rule: **USB and the external 5 V are never connected at the
 
 Consequences that shape the rest of the design:
 
-- Power enters the ESP32 at the **`5V` pin (header pin 19)**, which is the VBUS net and is explicitly bidirectional. The `3V3` pin (pin 2) is an output and must never be fed.
-- 100 µF plus 100 nF sit at the 5 V pin, and the controller taps the rail near the supply rather than at the far end, so the Wi-Fi transmit peak does not have to travel through the distribution.
+- Power enters the ESP32 at the pin **labelled `5V`** on the silkscreen (header position 19 in the 28-pin numbering), which is the VBUS net and is explicitly bidirectional. It has no GPIO number: `GPIO19` is USB D+ on header position 25 and must never be fed. The `3V3` pin is a regulated output and must never be fed either.
+- Bulk capacitance plus 100 nF sits at the 5 V pin: at least 100 µF as designed, 1000 µF in the prototype. Without capacitance at the board, uploads on the rail took 35.6 s and 39.4 s against 10.8 s on USB power; with 1000 µF fitted, 15.5 s. One sample on the fast side, so suggestive rather than proven causal.
 - The sensor's VCC is now the rail it measures, which is exactly the case D6 says turns the second ADC channel from optional into required; D9 makes it required.
+- The controller and the strip were confirmed to run from that one rail on the bench: with the board powered from `5V` and no USB attached, an over-the-air update drove the offcut strip's first five pixels through the level shifter, and the pattern was correct by eye.
 - The only in-situ observability is the network, because there is no USB console when the rail is the power source. The OTA spike therefore answers `GET /` with a status document as well as accepting `PUT /ota`, and the clock should keep a small status surface for the same reason.
 - First flashing and any recovery still need USB. Unplug the rail, or use a charge-only cable with VBUS cut, rather than powering both.
 
