@@ -103,6 +103,24 @@ The trunk is the only place to look: 16 rows at full white is 17 A, and 9 A limi
 
 Alternatives: replacing all rails with 2.5 mm² (rejected, no measurable benefit and much harder to route), moving the supply closer instead (equally valid where the layout allows).
 
+### D9: One 5 V supply for everything, firmware updates over OTA
+
+The clock runs from a single 5 V supply that feeds the controller, the sensor and the strip. There is no second supply and no USB power in the finished build.
+
+This is the simplification the user asked for, and it is what the existing build already looks like: one 60 W supply, a distribution trunk, and per-row rails. It also removes a class of failure that a two-supply build invites — ground offsets and one supply back-feeding the other through a shared USB cable.
+
+The cost is one hard rule: **USB and the external 5 V are never connected at the same time.** VBUS on the C3 is the same node as the `5V` pin, so connecting both puts two supplies in parallel with no current sharing and no back-feed protection. A series diode does not fix that; only a power mux (TPS2116, LM66200) would, and a mux is not worth it here because firmware updates go over OTA.
+
+Consequences that shape the rest of the design:
+
+- Power enters the ESP32 at the **`5V` pin (header pin 19)**, which is the VBUS net and is explicitly bidirectional. The `3V3` pin (pin 2) is an output and must never be fed.
+- 100 µF plus 100 nF sit at the 5 V pin, and the controller taps the rail near the supply rather than at the far end, so the Wi-Fi transmit peak does not have to travel through the distribution.
+- The sensor's VCC is now the rail it measures, which is exactly the case D6 says turns the second ADC channel from optional into required; D9 makes it required.
+- The only in-situ observability is the network, because there is no USB console when the rail is the power source. The OTA spike therefore answers `GET /` with a status document as well as accepting `PUT /ota`, and the clock should keep a small status surface for the same reason.
+- First flashing and any recovery still need USB. Unplug the rail, or use a charge-only cable with VBUS cut, rather than powering both.
+
+Alternatives and why they lost: keeping the USB supply for the controller and the 5 V rail for the LEDs (rejected, that is the arrangement the user is replacing); a series diode between the rail and the 5 V pin (rejected — a 1N4148 both drops too much and is rated far below the C3's ~335 mA Wi-Fi peak, and it still does not stop the rail from feeding the host through VBUS); a power mux (rejected as unnecessary once OTA is the update path).
+
 ## Risks / Trade-offs
 
 - **Estimate error of ±10–20 %** → the 9 A limit plus a 95 % margin keeps the command under 12 A even at the pessimistic end, and `k_drive` is calibrated from the strip rather than assumed.
@@ -113,6 +131,8 @@ Alternatives: replacing all rails with 2.5 mm² (rejected, no measurable benefit
 - **The limiter hides a real fault** → it bounds the command, not the load; supply OCP and a fuse stay in the design, and engaging the limiter is logged rather than silent.
 - **Slow trim could alter a parity frame** → normal frames never reach the limit, and the trim only moves when the measurement is sustained above it; if it ever engages, that is logged as a fault condition, not a normal state.
 - **A mis-set limit makes the clock dark** → the limit is validated at startup, the applied scale is logged, and the default is chosen so normal frames are untouched.
+- **Someone connects USB while the rail is live** → the rule is stated in the README ahead of the wiring instructions, and the OTA path removes the everyday reason to plug in; a charge-only cable is the safe way to flash with the rail disconnected.
+- **No console in situ** → the device is observable over HTTP instead, which is why the OTA endpoint doubles as a status endpoint.
 
 ## Migration Plan
 
@@ -124,5 +144,5 @@ Alternatives: replacing all rails with 2.5 mm² (rejected, no measurable benefit
 
 ## Open Questions
 
-- Whether the ratiometric compensation needs the second ADC channel in practice, or whether boot zeroing is stable enough over the clock's temperature range. Deferrable: the wiring can accommodate a second channel later.
+- ~~Whether the ratiometric compensation needs the second ADC channel in practice~~ settled by D9: on a single rail the sensor's VCC is the measured rail, so the channel is required. Still open is the ADC pin, which must be an ADC1 channel not taken by the strip's data line.
 - The exact `k_drive` for the strip in hand, pending the all-white measurement.

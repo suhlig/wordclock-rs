@@ -39,6 +39,13 @@
 - [ ] 6.2 Run a normal clock frame on the real strip. Verify the displayed words, colours, and brightness are unchanged from the pre-change build.
 - [ ] 6.3 Record the measured `k_drive`, the final limit, and the observed peak current in this change's `design.md`.
 
+## 7. Single 5 V rail and OTA updates
+
+- [ ] 7.1 Document the single-rail topology in `docs/hardware.md`: 5 V from the supply into the C3's `5V` pin (pin 19), 100 µF + 100 nF at that pin, the controller tapped near the supply, sensor VCC on the measured rail, and the never-both-supplies rule. Verify the README warning, the hardware guide, and design D9 agree.
+- [ ] 7.2 Prototype OTA over HTTP on the C3 in `spike/esp32c3-ota` and update the running board with `curl` while it is powered from its 5 V pin and no USB is attached. Verify the reported revision changes after the update.
+- [ ] 7.3 Add the supply-voltage channel and the ratiometric compensation from design D6/D9 to the sensor path. Verify against the bench supply at two rail voltages that the reported current tracks within ±0.2 A.
+- [ ] 7.4 Power the C3 from the 5 V pin instead of USB and re-run a normal clock frame. Verify the frame is byte-identical and the strip shows no difference.
+
 ## Workflow follow-up
 
 - Archive the change after review satisfies the project's requirements.

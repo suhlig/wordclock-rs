@@ -54,6 +54,17 @@ The system SHALL sample the current sensor in the 5 V feed, average multiple sam
 - **WHEN** the sensor is missing or its reading is out of range
 - **THEN** the clock keeps rendering, the estimate-only limit stays active, and the condition is logged
 
+### Requirement: Ratiometric compensation on a shared supply
+When the sensor is powered from the same 5 V rail it measures, the system SHALL sample that rail's voltage and use it to compensate both the sensor's zero point and its sensitivity, because the ACS712 output is ratiometric.
+
+#### Scenario: Rail sagging under load
+- **WHEN** the 5 V rail drops from 5.0 V to 4.8 V while the strip draws current
+- **THEN** the reported current is compensated for the shifted zero point and reduced sensitivity, and stays within the sensor's stated error of the true current
+
+#### Scenario: Supply-voltage channel unavailable
+- **WHEN** the voltage-reading channel is missing or out of range
+- **THEN** the system falls back to the nominal 5.0 V, keeps rendering, and logs that the current reading is uncompensated
+
 ### Requirement: Slow trim
 The system SHALL adjust the applied scale slowly when the measured current is sustained above the limit and SHALL recover it slowly when the measurement falls below a lower threshold, using hysteresis so the scale does not change every frame.
 
@@ -70,8 +81,12 @@ The system SHALL adjust the applied scale slowly when the measured current is su
 - **THEN** the scale changes at a bounded rate rather than on every frame
 
 ### Requirement: Current observability
-The system SHALL log the measured current, the supply voltage where available, and the applied scale at a bounded rate.
+The system SHALL log the measured current, the supply voltage where available, and the applied scale at a bounded rate, and SHALL make them available without a serial console.
 
 #### Scenario: Periodic log line
 - **WHEN** the clock is running with a sensor attached
 - **THEN** it emits current, voltage, and applied scale at a configured interval without flooding the log
+
+#### Scenario: No console attached
+- **WHEN** the clock runs from its 5 V supply with no USB connection
+- **THEN** the same values are readable over the network

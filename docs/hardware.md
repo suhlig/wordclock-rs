@@ -207,6 +207,17 @@ What to look for in a capture: a 0.4 µs high pulse for a zero bit, 0.8 µs for 
 
 The strip and the level shifter share the LED 5 V rail; the Pi keeps its own supply. The grounds must be common, because the level shifter's input is referenced to the Pi's ground and its output to the strip's.
 
+### Single 5 V rail with the ESP32-C3
+
+The C3 build goes further and drops the second supply: one 5 V rail feeds the controller, the current sensor, and the strip.
+
+- Feed the C3 at its **`5V` pin, header pin 19** on the DevKit-RUST-1; boards with other silkscreens call the same pin `VIN`. Never feed `3V3` (pin 2); it is an output.
+- **Never connect USB while the rail is powered**, and never leave USB connected with the rail off. VBUS and `5V` are the same node, so two supplies would be paralleled with no back-feed protection.
+- Put 100 µF and 100 nF from `5V` to `GND` at the board, and tap the rail near the supply rather than at the far end. The C3's Wi-Fi transmit peak is about 335 mA and should not have to travel through the LED distribution.
+- Firmware updates go over OTA, so the built clock needs neither USB nor a console. `spike/esp32c3-ota` is the prototype of that path and `spike/esp32c3-ota/README.md` has the commands.
+
+The reasoning, including why a series diode does not substitute for a power mux, is design decision D9 in `openspec/changes/add-power-budget-and-current-sensing/design.md`.
+
 Only the lit words draw current, so the average load is far below the strip's worst case, but the supply must still cover the all-on test without dropping out. If the clock is powered from one point, feed the strip from the supply end and not through the Pi's header.
 
 The 1000 µF sits at the first LED and absorbs the current step when a frame changes. The 47 nF sits at the shifter and decouples the switching edges. Neither is optional in practice: without them the first pixel misbehaves intermittently in ways that look like software bugs.
