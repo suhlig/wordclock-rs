@@ -93,6 +93,18 @@ The consistent 2.30 s versus 11.3 s difference is the DHCP lease reacquisition a
 
 The software `write()` time includes the 80 µs reset, buffer conversion, and channel hand-over, so it overstates the line time. The analyzer capture is authoritative: one frame carries 7.311 ms of bitstream and no low interval above 0.708 µs. The setup was the Pico H with `sigrok-pico` and the `raspberrypi-pico` driver, clipped directly to GPIO2 (3.3 V, so no level shifter was needed), one channel at 24 MHz, 380,000 samples. The `frame-loop` feature streams the 06:30 frame back-to-back for the capture, and `rgb_led_ws281x` decoded all 288 pixels identically to `examples/dump_frame.rs` for the same time and seed.
 
-## 4.8 Decision
+## 4.8 OTA update path
+
+The single 5 V decision (design D9 of `add-power-budget-and-current-sensing`) removes USB from the finished build, so firmware updates need a path that does not touch VBUS. `spike/esp32c3-ota` implements HTTP on port 3232 and was verified on 2026-10-31.
+
+- Layout: two OTA slots of 1,966,080 bytes plus `otadata`; the spike image is 522,848 bytes, 26.6 % of one slot.
+- `PUT /ota` with `curl -T` streams the body into the inactive slot, verifies the `0xE9` magic byte, switches the boot pointer, marks the image `New`, and resets.
+- Four consecutive uploads alternated ota_0 → ota_1 → ota_0 and delivered a changed revision. The bootloader line `Loaded app from partition at offset 0x200000` and the status field `running=Ota1` are the proof, both from the device rather than from the client.
+- Upload time: 10.8 s for 522,848 bytes, about 48 KB/s. The limit is the flash path (128 pages of 4 KiB, each erasing a sector with interrupts masked), not Wi-Fi; the link survived every transfer.
+- Gotcha: reflashing a board that previously used a different partition layout leaves stale bytes at `0x10000`, which is the second `otadata` slot in this layout. The library rejects the entry, the whole partition becomes unusable (`Error::Invalid`), and the first update cannot start. The spike repairs this at boot by scrubbing `otadata` and selecting the slot the MMU says is running; `espflash erase-flash` does the same from outside.
+- Observability without a console: `GET /` reports the revision, uptime, heap, the running slot (from the MMU mapping), the boot selection, and the slot state, and the on-board WS2812 blinks the revision at boot and then shows ready, progress and error colours.
+- Not verified: powering the board from the `5V` pin (the next bench step), and update behaviour during a Wi-Fi outage.
+
+## 4.9 Decision
 
 Pending the measurements above. If the spike is inconclusive, the Pi 3B wins by default.
