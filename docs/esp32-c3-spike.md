@@ -36,9 +36,16 @@ The seedless `ColorPicker::new(None, ...)` path uses `fastrand::Rng::new`, which
 ## 4.3 RMT strip test
 
 - The board's own README maps the on-board WS2812 to GPIO2 (not GPIO8, which is the generic DevKitM-1 pin).
-- `spike/esp32c3-blink` now drives that LED over RMT with `esp-hal-smartled` 0.18.0, `WS2812_TIMING`, and GRB order. It cycles red, green, blue, white, off every 700 ms.
-- Visual confirmation: the on-board LED cycles red, green, blue, white, off in that order, so the GRB byte order and RMT timing are correct for this LED.
-- The 288-pixel offcut strip test still waits for the 74AHCT125 and passives on Wednesday. That test will use a free header GPIO, the level shifter, a 470 Ω series resistor, and the Pico analyzer for pulse widths and inter-chunk gaps.
+- `spike/esp32c3-blink` first drove that LED over RMT with `esp-hal-smartled` 0.18.0, `WS2812_TIMING`, and GRB order, cycling red, green, blue, white, off every 700 ms.
+- Visual confirmation at that stage: the on-board LED cycled red, green, blue, white, off in that order, so the GRB byte order and RMT timing were correct for that LED.
+
+Offcut through the level shifter (2026-10-31):
+
+- A 35-pixel WS2812 offcut, after removing the dead pixels from the 41-pixel piece, runs from GPIO3 through the SN74AHCT125N at 5 V, with a 470 Ω series resistor and a common ground between the C3, the shifter and the strip.
+- `spike/esp32c3-blink` now runs two patterns in a loop: all 35 pixels in red, green, blue, white and off at 700 ms each, then a single white pixel walking 0 to 34 at 120 ms per step. All 35 pixels light and hold colour, the primaries are correct, and the walking pixel runs end to end in order. That proves GRB order, index order and 5 V drive; it does not prove the edge quality or the voltage at `1Y`, which were not measured.
+- GPIO3 replaces GPIO2 as the strip data pin. On this board only GPIO0, GPIO1 and GPIO3 have no strapping role, no JTAG duty, no internal-flash line and no onboard peripheral. GPIO4-7 carry JTAG plus the flash data lines, GPIO8 and GPIO10 are the I2C bus to the IMU and SHTC3, GPIO9 is the BOOT button, and GPIO2 is a strapping pin shared with the on-board WS2812. The on-board LED is therefore no longer driven by this firmware.
+- `memsize` stays at 2, which is the maximum for channel 0. A 35-pixel frame is 842 RMT codes against 96 codes of channel RAM, so esp-hal refills the RAM in half-blocks while transmitting; no gap was measured and none is expected at this length.
+- The 5 V side was verified by eye only. `1Y` has not been on the analyzer and the levels were not taken with a meter, so the edge-quality half of D16 still rests on the 4.7 capture, which was made at GPIO2 on the 3.3 V side.
 
 ## 4.4 Wi-Fi and SNTP
 

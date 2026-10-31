@@ -35,33 +35,50 @@ fn main() -> ! {
 
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 66320);
 
-    // The ESP32-C3-DevKit-RUST-1 has its on-board WS2812 on GPIO2.
+    // GPIO3 is a free header pin on the ESP32-C3-DevKit-RUST-1: no strapping role,
+    // no onboard peripheral, no JTAG and no internal-flash duty. GPIO4-7 carry JTAG
+    // and the flash data lines, GPIO8/10 the I2C bus, GPIO9 is the BOOT button, and
+    // GPIO2 is a strapping pin with the on-board WS2812 on it.
     let frequency = Rate::from_mhz(80);
     let rmt = Rmt::new(peripherals.RMT, frequency).expect("Failed to initialize RMT");
+
+    const PIXELS: usize = 35; // offcut length after removing the dead pixels
+
     let mut led =
-        RmtSmartLeds::<{ buffer_size::<RGB8>(1) }, _, RGB8, color_order::Grb>::new_with_memsize(
+        RmtSmartLeds::<{ buffer_size::<RGB8>(PIXELS) }, _, RGB8, color_order::Grb>::new_with_memsize(
             esp_hal_smartled::WS2812_TIMING,
             rmt.channel0,
-            peripherals.GPIO2,
+            peripherals.GPIO3,
             2,
             frequency,
         )
         .expect("Failed to initialize the WS2812 driver");
 
     let delay = Delay::new();
-    let colors = [
-        ("red", RGB8::new(255, 0, 0)),
-        ("green", RGB8::new(0, 255, 0)),
-        ("blue", RGB8::new(0, 0, 255)),
-        ("white", RGB8::new(255, 255, 255)),
-        ("off", RGB8::new(0, 0, 0)),
-    ];
+    let mut buffer = [RGB8::new(0, 0, 0); PIXELS];
 
     loop {
-        for (name, color) in colors {
-            info!("on-board WS2812: {name}");
-            led.write([color]).expect("RMT write failed");
+        // Primaries first: a swapped channel order shows up immediately.
+        for (name, color) in [
+            ("red", RGB8::new(255, 0, 0)),
+            ("green", RGB8::new(0, 255, 0)),
+            ("blue", RGB8::new(0, 0, 255)),
+            ("white", RGB8::new(255, 255, 255)),
+            ("off", RGB8::new(0, 0, 0)),
+        ] {
+            info!("all {PIXELS}: {name}");
+            buffer.fill(color);
+            led.write(buffer.iter().copied()).expect("RMT write failed");
             delay.delay_millis(700);
+        }
+
+        // Walking pixel: proves every index is addressed, in order, end to end.
+        for index in 0..PIXELS {
+            info!("walk {index}");
+            buffer.fill(RGB8::new(0, 0, 0));
+            buffer[index] = RGB8::new(255, 255, 255);
+            led.write(buffer.iter().copied()).expect("RMT write failed");
+            delay.delay_millis(120);
         }
     }
 }

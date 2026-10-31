@@ -33,7 +33,7 @@ The 74HCT245 is a documented fallback if the AHCT125 cannot be sourced: Reichelt
 
 ## Wiring
 
-The diagram below is the Pi path. On the ESP32-C3 path, replace `GPIO10` with a free, non-strapping header GPIO and use the RMT peripheral instead of SPI0; the level-shifter pinout, 470 Ω resistor, capacitors, and common ground do not change. Choose the GPIO from the board schematic and avoid the USB and boot-strapping pins.
+The diagram below is the Pi path. On the ESP32-C3 path, replace `GPIO10` with `GPIO3` (header pin 8) and use the RMT peripheral instead of SPI0; the level-shifter pinout, 470 Ω resistor, capacitors, and common ground do not change. GPIO3 is one of only three exposed pins with no strapping role, no JTAG or internal-flash duty and no onboard peripheral, the other two being GPIO0 and GPIO1. Avoid GPIO2 (strapping, on-board WS2812), GPIO4–7 (JTAG plus flash data), GPIO8 and GPIO10 (the I²C bus to the IMU and SHTC3), GPIO9 (BOOT) and GPIO18/19 (USB).
 
 Signal path, pin by pin:
 
@@ -177,7 +177,7 @@ A Raspberry Pi Pico H flashed with `sigrok-pico` gives an open logic analyzer fo
 
 The firmware caps digital capture at 120 Msps, limited by the 120 MHz PIO clock. Neither RP2040 nor RP2350 changes that, so any Pico works.
 
-Channel `D2` in sigrok is GPIO2 on the Pico (physical pin 4), and GPIO2 is also the ESP32-C3's on-board WS2812 and the strip data pin. A direct 3.3 V clip therefore captures the real RMT stream without the level shifter, which is the right way to check timing before the 5 V side exists. Use `GND` on physical pin 3 and never clip the Pico to the 5 V side.
+Channel `D2` in sigrok is GPIO2 on the Pico (physical pin 4); that is the analyzer's own pin and unrelated to the C3's GPIO2. Clip it to the selected host's data pin: GPIO3 on the ESP32-C3-DevKit-RUST-1, or GPIO10 on the Pi. The C3's on-board WS2812 sits on GPIO2 and is not the strip data pin in this build. A direct 3.3 V clip therefore captures the real RMT stream without the level shifter, which is the right way to check timing before the 5 V side exists. Use `GND` on physical pin 3 and never clip the Pico to the 5 V side.
 
 The released `sigrok-cli` 0.7.2 and PulseView 0.4.2 do not include the driver. Run `scripts/setup-sigrok-pico.sh`, which builds libsigrok and sigrok-cli from git into `$HOME/opt/sigrok-pico` and skips the C++, Python, and Java bindings that make the Homebrew HEAD formula fail. Add `$HOME/opt/sigrok-pico/bin` to `PATH`; the script verifies the driver and the decoder. The Homebrew `glib`, `libserialport`, `libusb`, `libzip`, `hidapi`, and `libftdi` packages must stay installed at runtime; install them explicitly so `brew autoremove` does not remove them.
 
