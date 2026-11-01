@@ -215,14 +215,22 @@ const IDENTITY_COLOURS: [RGB8; 6] = [
 #[cfg(feature = "identity-check")]
 const IDENTITY_OFFSET: usize = 1;
 
-/// WS2812 through SPI: three SPI bits per LED bit at 2.5 MHz, so a `0` bit is
-/// `100` (0.4 us high, 0.8 us low) and a `1` bit is `110` (0.8 us high, 0.4 us
-/// low).
+/// WS2812 through SPI: three SPI bits per LED bit, so a `0` bit is `100`
+/// (0.4 us high, 0.8 us low) and a `1` bit is `110` (0.8 us high, 0.4 us low).
 ///
 /// The point of SPI here is DMA: the peripheral shifts the bits out of memory
 /// with no CPU involvement, which is what RMT cannot do on this chip.
+///
+/// The clock is 2.22 MHz rather than 2.5 MHz because the strip mis-read one bit
+/// across a pixel boundary whenever a pixel ended in a `1`: at 2.5 MHz that
+/// leaves only 0.4 us between the `1` and the next pixel's leading `0`, which is
+/// the tight end of the WS2812B tolerance. At 2.22 MHz the gap is 0.45 us and
+/// `T1H` grows to 0.9 us, while `T0H` stays at 0.45 us, inside its 0.55 us max.
+///
+/// This change has not been read back on the strip. Whether the stray pixel goes
+/// away is unknown; see `docs/strip-colour-fault-handover.md`.
 #[cfg(feature = "strip-check")]
-const STRIP_KHZ: u32 = 2_500;
+const STRIP_KHZ: u32 = 2_222;
 const STRIP_BIT_BYTES: usize = STRIP_LENGTH * 9;
 
 /// Trailing zero bytes hold the data line low for a reset. At 2.5 MHz, 20 bytes
