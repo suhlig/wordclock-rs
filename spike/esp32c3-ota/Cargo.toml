@@ -89,6 +89,9 @@ fill-check = ["strip-check"]
 # fill both send sparse bits and therefore cannot clear a dense payload.
 # Implies strip-check.
 dense-check = ["strip-check"]
+# Hold a fixed run of known colours at the start of the chain, so the physical
+# pixel can be read back against the logical one. Implies strip-check.
+identity-check = ["strip-check"]
 
 [profile.dev]
 # The default debug profile is too slow and too big for resource-constrained devices.

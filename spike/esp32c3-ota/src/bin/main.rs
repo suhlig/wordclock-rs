@@ -40,7 +40,9 @@ use esp_bootloader_esp_idf::partitions::{
 use esp_hal::clock::CpuClock;
 use esp_hal::rmt::Rmt;
 use esp_hal::rng::Rng;
+#[cfg(feature = "strip-check")]
 use esp_hal::spi::Mode;
+#[cfg(feature = "strip-check")]
 use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDma};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
@@ -83,7 +85,7 @@ macro_rules! mk_static {
 /// and `GET /` reports it, which is how an update is verified without USB.
 /// It sits at 13: the strip check, the boot-order work, the walking check, the
 /// move from RMT to SPI with DMA, and the fixture-frame parity build.
-const REVISION: u32 = 15;
+const REVISION: u32 = 19;
 
 const OTA_PORT: u16 = 3232;
 const HEADER_MAX: usize = 1024;
@@ -116,79 +118,48 @@ type Leds<'a> =
 #[cfg(feature = "strip-check")]
 const STRIP_LENGTH: usize = 335;
 
-/// Dwell time on each pixel of the walk, in milliseconds. With 335 pixels one
-/// sweep takes about 100 s.
+/// The walk, and the payload it carries.
+///
+/// The default sweep is dim white, which proves the wiring. With `dense-check`
+/// it carries the colour the fixture frame really renders instead, because a dim
+/// white walk (`10`) and a fill at the low level (`06`) are both nearly all-zero
+/// bits and neither exercises the shape the failing frame has: `ee0b01` is eight
+/// ones in the green channel and almost nothing elsewhere.
+///
+/// Either way one pixel at a time keeps the current at roughly the 335 mA
+/// quiescent term plus about 20 mA of drive.
 #[cfg(all(
     feature = "strip-check",
     not(feature = "frame-check"),
     not(feature = "fill-check"),
-    not(feature = "dense-check")
+    not(feature = "identity-check")
 ))]
-const WALK_STEP_MS: u64 = 300;
+mod walk_pattern {
+    use super::RGB8;
 
-/// The walk colour: dim enough for a dark room, bright enough to see. Every
-/// tenth pixel is green instead of white, so a failure can be counted to.
-#[cfg(all(
-    feature = "strip-check",
-    not(feature = "frame-check"),
-    not(feature = "fill-check"),
-    not(feature = "dense-check")
-))]
-const WALK_PIXEL: RGB8 = RGB8::new(16, 16, 16);
-#[cfg(all(
-    feature = "strip-check",
-    not(feature = "frame-check"),
-    not(feature = "fill-check"),
-    not(feature = "dense-check")
-))]
-const WALK_MARKER: RGB8 = RGB8::new(0, 16, 0);
-#[cfg(all(
-    feature = "strip-check",
-    not(feature = "frame-check"),
-    not(feature = "fill-check"),
-    not(feature = "dense-check")
-))]
-const WALK_MARKER_EVERY: usize = 10;
+    #[cfg(not(feature = "dense-check"))]
+    pub const STEP_MS: u64 = 300;
+    #[cfg(not(feature = "dense-check"))]
+    pub const PIXEL: RGB8 = RGB8::new(16, 16, 16);
+    /// Every tenth pixel is green instead of white, so a failure can be counted.
+    #[cfg(not(feature = "dense-check"))]
+    pub const MARKER: RGB8 = RGB8::new(0, 16, 0);
 
-// The dense walk keeps the same machinery and changes only the payload. The
-// fixture frame renders `ee0b01`, which is eight ones in the green channel and
-// almost nothing elsewhere; a dim white walk (`10`) and a fill at the low level
-// (`06`) are both nearly all-zero bits, so neither one exercises the shape that
-// the failing frame carries.
-//
-// One pixel at a time keeps the current at `335 mA` quiescent plus about
-// `250 * 20/255` = 20 mA of drive, which is comfortably inside 500 mA.
-#[cfg(all(
-    feature = "strip-check",
-    not(feature = "frame-check"),
-    not(feature = "fill-check"),
-    feature = "dense-check"
-))]
-const WALK_STEP_MS: u64 = 400;
-#[cfg(all(
-    feature = "strip-check",
-    not(feature = "frame-check"),
-    not(feature = "fill-check"),
-    feature = "dense-check"
-))]
-const WALK_PIXEL: RGB8 = RGB8::new(0xee, 0x0b, 0x01);
-/// Every tenth pixel is green at the same bit density, so the payload on the
-/// wire is unchanged and only the channel moves. Counting a failure needs the
-/// marker; judging whether a pixel is the right colour does not.
-#[cfg(all(
-    feature = "strip-check",
-    not(feature = "frame-check"),
-    not(feature = "fill-check"),
-    feature = "dense-check"
-))]
-const WALK_MARKER: RGB8 = RGB8::new(0x00, 0xee, 0x00);
-#[cfg(all(
-    feature = "strip-check",
-    not(feature = "frame-check"),
-    not(feature = "fill-check"),
-    feature = "dense-check"
-))]
-const WALK_MARKER_EVERY: usize = 10;
+    #[cfg(feature = "dense-check")]
+    pub const STEP_MS: u64 = 400;
+    #[cfg(feature = "dense-check")]
+    pub const PIXEL: RGB8 = RGB8::new(0xee, 0x0b, 0x01);
+    /// Deliberately the same colour as [`PIXEL`].
+    ///
+    /// A marker made every tenth pixel green by design, which hid the thing we
+    /// are chasing: a stray *green* pixel could always be the marker. With one
+    /// colour for every step, a stray green can only be a stale byte left in the
+    /// bitstream. Counting is no longer possible, which is the price.
+    #[cfg(feature = "dense-check")]
+    pub const MARKER: RGB8 = PIXEL;
+
+    pub const MARKER_EVERY: usize = 10;
+}
 
 /// One channel at a time, so a pixel showing any other colour proves that the
 /// bytes on the wire are not the bytes we encoded. White is omitted: all three
@@ -215,13 +186,43 @@ const FILL_COLOURS: [RGB8; 4] = [
 #[cfg(feature = "fill-check")]
 const FILL_REFRAMES: u32 = 5;
 
+/// A fixed run of known colours at the start of the chain, held still.
+///
+/// The walk moves, which makes it hard to tell a channel-order swap from pixel
+/// data spreading over two chips. Static single channels can be read back
+/// pixel by pixel in one glance: red, green, blue, yellow, white, then black.
+/// If the chain shows those five colours in that order over five physical
+/// pixels, the encoding is right and the walk's oddity is something else. If
+/// the colours come out permuted, it is channel order. If they smear over seven
+/// or eight pixels, one logical pixel is not one chip.
+#[cfg(feature = "identity-check")]
+const IDENTITY_COLOURS: [RGB8; 6] = [
+    RGB8::new(238, 0, 0),
+    RGB8::new(0, 238, 0),
+    RGB8::new(0, 0, 238),
+    RGB8::new(238, 238, 0),
+    RGB8::new(255, 255, 255),
+    RGB8::new(0, 0, 0),
+];
+
+/// Where the identity run starts.
+///
+/// Moving it is the point of the constant. At offset 0 the reversed run lighted
+/// pixels 0 to 4 and a stray green appeared at pixel 5, the first pixel after
+/// the run. At offset 1 the run is pixels 1 to 5, so if the stray green moves to
+/// pixel 6 the fault travels with the data and lives in the transport; if it
+/// stays at pixel 5, that LED is faulty instead.
+#[cfg(feature = "identity-check")]
+const IDENTITY_OFFSET: usize = 1;
+
 /// WS2812 through SPI: three SPI bits per LED bit at 2.5 MHz, so a `0` bit is
-/// 100 (0.4 us high, 0.8 us low) and a `1` bit is 110 (0.8 us high, 0.4 us
-/// low), both inside the WS2812B tolerance and exact at 80 MHz / 32.
+/// `100` (0.4 us high, 0.8 us low) and a `1` bit is `110` (0.8 us high, 0.4 us
+/// low).
 ///
 /// The point of SPI here is DMA: the peripheral shifts the bits out of memory
 /// with no CPU involvement, which is what RMT cannot do on this chip.
 #[cfg(feature = "strip-check")]
+const STRIP_KHZ: u32 = 2_500;
 const STRIP_BIT_BYTES: usize = STRIP_LENGTH * 9;
 
 /// Trailing zero bytes hold the data line low for a reset. At 2.5 MHz, 20 bytes
@@ -1001,7 +1002,7 @@ async fn main(spawner: Spawner) -> ! {
     let strip = match Spi::new(
         peripherals.SPI2,
         SpiConfig::default()
-            .with_frequency(Rate::from_khz(2_500))
+            .with_frequency(Rate::from_khz(STRIP_KHZ))
             .with_mode(Mode::_0),
     ) {
         Ok(spi) => {
@@ -1186,14 +1187,45 @@ async fn strip_check(
     frame: &'static mut [RGB8; STRIP_LENGTH],
     bits: &'static mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
 ) {
-    #[cfg(feature = "fill-check")]
+    #[cfg(feature = "identity-check")]
+    hold_identity(strip, frame, bits).await;
+
+    #[cfg(all(feature = "fill-check", not(feature = "identity-check")))]
     hold_fill(strip, frame, bits).await;
 
-    #[cfg(all(feature = "frame-check", not(feature = "fill-check")))]
+    #[cfg(all(
+        feature = "frame-check",
+        not(feature = "fill-check"),
+        not(feature = "identity-check")
+    ))]
     hold_fixture(strip, frame, bits).await;
 
-    #[cfg(not(any(feature = "frame-check", feature = "fill-check")))]
+    #[cfg(not(any(
+        feature = "frame-check",
+        feature = "fill-check",
+        feature = "identity-check"
+    )))]
     walk(strip, frame, bits).await;
+}
+
+/// Holds a fixed run of known colours at the start of the chain.
+#[cfg(feature = "identity-check")]
+async fn hold_identity(
+    strip: &'static mut Strip,
+    frame: &'static mut [RGB8; STRIP_LENGTH],
+    bits: &'static mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
+) -> ! {
+    frame.fill(RGB8::new(0, 0, 0));
+    for (offset, colour) in IDENTITY_COLOURS.iter().enumerate() {
+        if let Some(slot) = frame.get_mut(IDENTITY_OFFSET + offset) {
+            *slot = *colour;
+        }
+    }
+
+    loop {
+        write_frame(strip, frame, bits);
+        Timer::after(Duration::from_secs(1)).await;
+    }
 }
 
 /// Fills every pixel with the same colour and cycles through the primaries.
@@ -1240,7 +1272,14 @@ async fn hold_fixture(
 }
 
 /// Walks one dim pixel through the whole chain.
-#[cfg(not(any(feature = "frame-check", feature = "fill-check")))]
+#[cfg(all(
+    feature = "strip-check",
+    not(any(
+        feature = "frame-check",
+        feature = "fill-check",
+        feature = "identity-check"
+    ))
+))]
 async fn walk(
     strip: &'static mut Strip,
     frame: &'static mut [RGB8; STRIP_LENGTH],
@@ -1248,16 +1287,16 @@ async fn walk(
 ) -> ! {
     loop {
         for index in 0..STRIP_LENGTH {
-            frame[index] = if index.is_multiple_of(WALK_MARKER_EVERY) {
-                WALK_MARKER
+            frame[index] = if index.is_multiple_of(walk_pattern::MARKER_EVERY) {
+                walk_pattern::MARKER
             } else {
-                WALK_PIXEL
+                walk_pattern::PIXEL
             };
 
             write_frame(strip, frame, bits);
 
             frame[index] = RGB8::new(0, 0, 0);
-            Timer::after(Duration::from_millis(WALK_STEP_MS)).await;
+            Timer::after(Duration::from_millis(walk_pattern::STEP_MS)).await;
         }
     }
 }
