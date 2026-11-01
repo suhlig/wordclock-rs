@@ -70,10 +70,10 @@ macro_rules! mk_static {
 
 /// Bump this before every OTA experiment. The on-board LED blinks it at boot
 /// and `GET /` reports it, which is how an update is verified without USB.
-/// It sits at 6 because the update path was exercised three times on the bench,
-/// once more with the strip check, once more after giving the strip check a
-/// full-length frame, and once more to dim it for night testing.
-const REVISION: u32 = 6;
+/// It sits at 9: three bench rounds, the strip check, the full-length frame,
+/// the night-time dimming, the boot-order diagnostics, and the final boot
+/// sequence.
+const REVISION: u32 = 9;
 
 const OTA_PORT: u16 = 3232;
 const HEADER_MAX: usize = 1024;
@@ -117,6 +117,10 @@ const STRIP_CHECK_PIXELS: usize = 5;
 const STRIP_PRIMARY: u8 = 13;
 #[cfg(feature = "strip-check")]
 const STRIP_WHITE: u8 = 10;
+
+/// Steady marker on the last pixel of the offcut, to expose missed frames.
+#[cfg(feature = "strip-check")]
+const STRIP_LAST_PIXEL: RGB8 = RGB8::new(20, 20, 20);
 
 #[cfg(feature = "strip-check")]
 type StripLeds<'a> = RmtSmartLeds<
@@ -818,6 +822,23 @@ async fn main(spawner: Spawner) -> ! {
 
     set_led(&mut led, LED_BOOT);
 
+    // The first frames go out as soon as the driver exists, and three times: the
+    // far end of a strip can still be finishing its power-on reset when the
+    // first one arrives, and the clock redraws only once a minute, so a pixel
+    // that misses the first frame stays wrong for a long time. Black, so a strip
+    // that latched something while the rail was rising comes up dark.
+    #[cfg(feature = "strip-check")]
+    if let Some(strip) = strip {
+        let strip = STRIP.init(strip);
+
+        for _ in 0..3 {
+            let _ = strip.write([RGB8::new(0, 0, 0); STRIP_LENGTH]);
+            Timer::after(Duration::from_millis(100)).await;
+        }
+
+        spawner.spawn(strip_check(strip).expect("failed to spawn the strip check"));
+    }
+
     // The revision blink is the only update indicator when the board runs from
     // the 5 V rail with no USB and therefore no serial console.
     for _ in 0..REVISION {
@@ -825,17 +846,6 @@ async fn main(spawner: Spawner) -> ! {
         Timer::after(Duration::from_millis(150)).await;
         set_led(&mut led, LED_OFF);
         Timer::after(Duration::from_millis(250)).await;
-    }
-
-    #[cfg(feature = "strip-check")]
-    if let Some(strip) = strip {
-        let strip = STRIP.init(strip);
-
-        // Clear the whole strip before anything else, so no pixel keeps a colour
-        // it latched while the rail was still coming up.
-        let _ = strip.write([RGB8::new(0, 0, 0); STRIP_LENGTH]);
-
-        spawner.spawn(strip_check(strip).expect("failed to spawn the strip check"));
     }
 
     println!(
@@ -995,7 +1005,9 @@ async fn strip_check(strip: &'static mut StripLeds<'static>) {
 }
 
 /// Writes a full-length frame with `count` lit pixels at the head and the rest
-/// black. Always full length: a short frame leaves the tail untouched.
+/// black, except the last pixel, which stays lit. That constant is the point:
+/// a pixel that misses a frame goes dark for that frame, so a dropout is
+/// visible even though nothing about the pattern changed.
 #[cfg(feature = "strip-check")]
 fn write_check(strip: &mut StripLeds<'_>, colour: RGB8, count: usize) {
     let mut frame = [RGB8::new(0, 0, 0); STRIP_LENGTH];
@@ -1003,6 +1015,8 @@ fn write_check(strip: &mut StripLeds<'_>, colour: RGB8, count: usize) {
     for pixel in frame.iter_mut().take(count) {
         *pixel = colour;
     }
+
+    frame[STRIP_LENGTH - 1] = STRIP_LAST_PIXEL;
 
     let _ = strip.write(frame);
 }

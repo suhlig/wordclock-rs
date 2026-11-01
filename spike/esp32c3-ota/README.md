@@ -148,9 +148,21 @@ The first version of this check wrote only five pixels, and on roughly every thi
 Two changes, one firmware and one wiring:
 
 - Every frame now covers all 35 pixels, with the ones the pattern does not use set to black, and the strip is cleared once at boot. Any junk is overwritten within a second instead of surviving until the next full frame happens to touch it. Verified over five power cycles on revision 6: two of them flashed the whole strip at power-up (once red, once green) and in **every** case the unused pixels went dark as soon as the first frame arrived.
-- A **10 kΩ pull-down from the shifter's input (pin 2, 1A) to ground** keeps DIN low through the whole power-up, so the junk is never latched in the first place. This is the cure; the full-length frame only hides the symptom quickly. It is reasoning from the cause and not yet measured: the two-of-five run was made without the resistor. `docs/hardware.md` has it in the connection list and the bill of materials.
+- A **10 kΩ pull-down from the shifter's input (pin 2, 1A) to ground** keeps DIN low through the whole power-up. Fitted, it changed the artefact rather than ending it: five of ten power-ups then turned only the first 19–20 pixels red, instead of the whole strip on two of five. It stays, a floating CMOS input being wrong on its own terms, but the prefix was a symptom of when the first frame arrived, not of the resistor.
+- The first frame the firmware sent was also arriving late: the driver is created early, but the write happened after the six-blink revision loop, about 2.4 s after reset, so the strip showed its power-on latch for seconds. Revision 7 sends a full-strip frame immediately after the driver comes up: ten of ten power-ups were then clean, with no red before or after that frame.
+- Revision 7 also surfaced a separate, unresolved observation at the **last pixel** of the offcut: in three of ten power-ups it did not light during the three-second marker frame, and in one case it stayed lit when the pattern took over. Every pixel receives identical data, so this is the tail of the strip rather than the driver — either it has not finished its own power-on reset when the first frame arrives, or that pixel is marginal, which would not be surprising on a cut-down roll that has already had dead pixels removed. Open question: does it ever miss a frame once the pattern is running?
 
-The two different flash colours are what identify the cause. In GRB order a red pixel is `0x00FF00` and a green one is `0xFF0000`, so the same high-then-low burst on the data line lands on different byte boundaries on different power-ups. Firmware would send the same colour every time; noise does not.
+The two different flash colours are what identified the cause. In GRB order a red pixel is `0x00FF00` and a green one is `0xFF0000`, so the same high-then-low burst on the data line lands on different byte boundaries on different power-ups. Firmware would send the same colour every time; noise does not.
+
+What actually removed the visible artefact was neither of those on its own, but the timing of the first frame: with the driver writing a full frame as soon as it exists, ten of ten power-ups were clean, against five of ten before. The pull-down is still correct (a floating CMOS input is wrong regardless), and the full-length frame is still required (a short frame cannot clear a tail it never addresses), but the seconds-long gap between reset and the first write was the thing on display.
+
+### The last pixel can be late
+
+Revision 7's run left the **last pixel** dark on three of ten power-ups, and once left it showing a stale colour when the pattern took over. Revision 8 replaced the single early frame with three one-second marker colours (blue, green, red) and added a steady dim-white pixel at the end of the strip, so that a pixel joining late would be visible and a missed frame would show as a dropout. Result: the last pixel lit **from the first marker colour** and held its steady level through the pattern. It was finishing its own power-on reset, not failing.
+
+The production shape, and what revision 9 does, is therefore: write the first frame as soon as the driver exists, write it three times, and make it black. The repetition matters more than it looks, because the clock redraws once per minute — a pixel that misses the first frame would stay wrong for a minute, not for one animation step.
+
+The steady last-pixel marker stays in the strip check as an instrument: if the tail ever does start missing frames, it will be obvious.
 
 The general rule for the clock: never send a short frame. With 300 pixels, a prefix frame leaves the tail at whatever it was, and the tail is most of the clock.
 
