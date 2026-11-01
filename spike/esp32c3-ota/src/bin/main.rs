@@ -40,6 +40,8 @@ use esp_bootloader_esp_idf::partitions::{
 use esp_hal::clock::CpuClock;
 use esp_hal::rmt::Rmt;
 use esp_hal::rng::Rng;
+use esp_hal::spi::Mode;
+use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDma};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal_smartled::{RmtSmartLeds, buffer_size, color_order};
@@ -70,10 +72,9 @@ macro_rules! mk_static {
 
 /// Bump this before every OTA experiment. The on-board LED blinks it at boot
 /// and `GET /` reports it, which is how an update is verified without USB.
-/// It sits at 9: three bench rounds, the strip check, the full-length frame,
-/// the night-time dimming, the boot-order diagnostics, and the final boot
-/// sequence.
-const REVISION: u32 = 9;
+/// It sits at 12: the strip check, the boot-order work, the walking check for
+/// the extended strip, and the move from RMT to SPI with DMA.
+const REVISION: u32 = 12;
 
 const OTA_PORT: u16 = 3232;
 const HEADER_MAX: usize = 1024;
@@ -100,47 +101,59 @@ const ESP_IMAGE_MAGIC: u8 = 0xE9;
 type Leds<'a> =
     RmtSmartLeds<'a, { buffer_size::<RGB8>(1) }, esp_hal::Blocking, RGB8, color_order::Grb>;
 
-/// The offcut is 35 pixels. A frame must always cover the whole strip: a frame
-/// that stops early leaves the remaining pixels at whatever they latched when
-/// the rail came up, which is exactly how stray red pixels survive a reboot.
+/// The chain is the 35-pixel offcut plus the 300 LEDs added to it, so 335.
+/// A frame must always cover the whole strip: a frame that stops early leaves
+/// the remaining pixels at whatever they latched when the rail came up.
 #[cfg(feature = "strip-check")]
-const STRIP_LENGTH: usize = 35;
+const STRIP_LENGTH: usize = 335;
 
-/// How many pixels the check actually lights. Five is enough to see the pattern
-/// and makes a shifted or reversed strip obvious.
+/// Dwell time on each pixel of the walk, in milliseconds. With 335 pixels one
+/// sweep takes about 100 s.
 #[cfg(feature = "strip-check")]
-const STRIP_CHECK_PIXELS: usize = 5;
+const WALK_STEP_MS: u64 = 300;
 
-/// Night-time levels: a fifth of the 64 and 48 this check started with. The
-/// strip sits in a dark room and full colour levels are painful to look at.
+/// The walk colour: dim enough for a dark room, bright enough to see. Every
+/// tenth pixel is green instead of white, so a failure can be counted to.
 #[cfg(feature = "strip-check")]
-const STRIP_PRIMARY: u8 = 13;
+const WALK_PIXEL: RGB8 = RGB8::new(16, 16, 16);
 #[cfg(feature = "strip-check")]
-const STRIP_WHITE: u8 = 10;
+const WALK_MARKER: RGB8 = RGB8::new(0, 16, 0);
+#[cfg(feature = "strip-check")]
+const WALK_MARKER_EVERY: usize = 10;
 
-/// Steady marker on the last pixel of the offcut, to expose missed frames.
+/// WS2812 through SPI: three SPI bits per LED bit at 2.5 MHz, so a `0` bit is
+/// 100 (0.4 us high, 0.8 us low) and a `1` bit is 110 (0.8 us high, 0.4 us
+/// low), both inside the WS2812B tolerance and exact at 80 MHz / 32.
+///
+/// The point of SPI here is DMA: the peripheral shifts the bits out of memory
+/// with no CPU involvement, which is what RMT cannot do on this chip.
 #[cfg(feature = "strip-check")]
-const STRIP_LAST_PIXEL: RGB8 = RGB8::new(20, 20, 20);
+const STRIP_BIT_BYTES: usize = STRIP_LENGTH * 9;
+
+/// Trailing zero bytes hold the data line low for a reset. At 2.5 MHz, 20 bytes
+/// are 160 bit times, 64 us, comfortably past the 50 us the strip needs.
+#[cfg(feature = "strip-check")]
+const STRIP_RESET_BYTES: usize = 20;
 
 #[cfg(feature = "strip-check")]
-type StripLeds<'a> = RmtSmartLeds<
-    'a,
-    { buffer_size::<RGB8>(STRIP_LENGTH) },
-    esp_hal::Blocking,
-    RGB8,
-    color_order::Grb,
->;
+type Strip = SpiDma<'static, esp_hal::Blocking>;
 
 /// Whether the strip driver was created, so the status page can tell a wiring
 /// problem apart from a firmware that does not drive the strip at all.
 #[cfg(feature = "strip-check")]
 static STRIP_READY: AtomicBool = AtomicBool::new(false);
 
-/// The strip driver owns an 842-code waveform buffer. Keeping it in a static
-/// rather than inside the task future keeps the executor's task pool small and
-/// makes the buffer's lifetime obvious.
+/// The SPI+DMA strip driver lives in a static so the task only holds a reference.
 #[cfg(feature = "strip-check")]
-static STRIP: StaticCell<StripLeds<'static>> = StaticCell::new();
+static STRIP: StaticCell<Strip> = StaticCell::new();
+
+/// The frame being walked, about a kilobyte, so also a static.
+#[cfg(feature = "strip-check")]
+static STRIP_FRAME: StaticCell<[RGB8; STRIP_LENGTH]> = StaticCell::new();
+
+/// The encoded bitstream handed to DMA: about 3 KiB for 335 pixels.
+#[cfg(feature = "strip-check")]
+static STRIP_BITS: StaticCell<[u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES]> = StaticCell::new();
 
 /// A byte buffer with flash-friendly alignment, so the flash layer never has
 /// to stage a copy through its own sector buffer.
@@ -401,6 +414,7 @@ fn status_document(
         stats.current_usage, stats.max_usage, stats.size
     );
     let _ = writeln!(document, "strip_check={}", strip_state());
+    let _ = writeln!(document, "strip_pixels={}", strip_pixels());
 
     match running_slot(flash, partition_buffer) {
         Ok(slot) => {
@@ -446,7 +460,7 @@ fn describe<T: core::fmt::Debug>(value: Option<T>) -> String {
 }
 
 /// `off` when this image has no strip check, `failed` when the RMT channel could
-/// not be set up, `on` when it is blinking.
+/// not be set up, `on` when it is walking.
 fn strip_state() -> &'static str {
     #[cfg(feature = "strip-check")]
     {
@@ -460,6 +474,19 @@ fn strip_state() -> &'static str {
     #[cfg(not(feature = "strip-check"))]
     {
         "off"
+    }
+}
+
+/// How many pixels the walk covers, or zero when the feature is off.
+fn strip_pixels() -> usize {
+    #[cfg(feature = "strip-check")]
+    {
+        STRIP_LENGTH
+    }
+
+    #[cfg(not(feature = "strip-check"))]
+    {
+        0
     }
 }
 
@@ -793,26 +820,26 @@ async fn main(spawner: Spawner) -> ! {
         )
         .expect("Failed to initialize the status LED");
 
-    // Channel 1 keeps the on-board indicator working: both drivers ask for a
-    // single RMT memory block, which is what leaves the other channel usable.
-    // A failure here must not take the OTA server down with it, because the
-    // only way back in is over the air.
+    // The strip runs on SPI with DMA, not RMT. An 8,042-code frame does not fit
+    // the RMT's 48-code memory, so RMT has to refill it every 30 us from the
+    // CPU, and Wi-Fi interrupts make it miss that deadline; the hardware then
+    // re-sends the block and shifts the rest of the frame. SPI shifts the bits
+    // out of memory with no CPU involvement at all. A failure here must not
+    // take the OTA server down with it, because the only way back in is over
+    // the air.
     #[cfg(feature = "strip-check")]
-    let strip = match RmtSmartLeds::<
-        { buffer_size::<RGB8>(STRIP_LENGTH) },
-        _,
-        RGB8,
-        color_order::Grb,
-    >::new_with_memsize(
-        esp_hal_smartled::WS2812_TIMING,
-        rmt.channel1,
-        peripherals.GPIO3,
-        1,
-        frequency,
+    let strip = match Spi::new(
+        peripherals.SPI2,
+        SpiConfig::default()
+            .with_frequency(Rate::from_khz(2_500))
+            .with_mode(Mode::_0),
     ) {
-        Ok(strip) => {
+        Ok(spi) => {
             STRIP_READY.store(true, Ordering::Relaxed);
-            Some(strip)
+            Some(
+                spi.with_mosi(peripherals.GPIO3)
+                    .with_dma(peripherals.DMA_CH0),
+            )
         }
         Err(error) => {
             error!("strip check unavailable: {error:?}");
@@ -830,13 +857,15 @@ async fn main(spawner: Spawner) -> ! {
     #[cfg(feature = "strip-check")]
     if let Some(strip) = strip {
         let strip = STRIP.init(strip);
+        let frame = STRIP_FRAME.init([RGB8::new(0, 0, 0); STRIP_LENGTH]);
+        let bits = STRIP_BITS.init([0u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES]);
 
         for _ in 0..3 {
-            let _ = strip.write([RGB8::new(0, 0, 0); STRIP_LENGTH]);
+            write_frame(strip, frame, bits);
             Timer::after(Duration::from_millis(100)).await;
         }
 
-        spawner.spawn(strip_check(strip).expect("failed to spawn the strip check"));
+        spawner.spawn(strip_check(strip, frame, bits).expect("failed to spawn the strip check"));
     }
 
     // The revision blink is the only update indicator when the board runs from
@@ -982,43 +1011,69 @@ async fn connection(mut controller: WifiController<'static>) {
 /// image can be replaced over the air from a phone or a shell.
 #[cfg(feature = "strip-check")]
 #[embassy_executor::task]
-async fn strip_check(strip: &'static mut StripLeds<'static>) {
+async fn strip_check(
+    strip: &'static mut Strip,
+    frame: &'static mut [RGB8; STRIP_LENGTH],
+    bits: &'static mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
+) {
+    // One reusable frame, so the walk costs a single DMA transfer per step and
+    // every frame covers the whole chain.
     loop {
-        for colour in [
-            RGB8::new(STRIP_PRIMARY, 0, 0),
-            RGB8::new(0, STRIP_PRIMARY, 0),
-            RGB8::new(0, 0, STRIP_PRIMARY),
-            RGB8::new(STRIP_WHITE, STRIP_WHITE, STRIP_WHITE),
-        ] {
-            write_check(strip, colour, STRIP_CHECK_PIXELS);
-            Timer::after(Duration::from_millis(500)).await;
+        for index in 0..STRIP_LENGTH {
+            frame[index] = if index.is_multiple_of(WALK_MARKER_EVERY) {
+                WALK_MARKER
+            } else {
+                WALK_PIXEL
+            };
+
+            write_frame(strip, frame, bits);
+
+            frame[index] = RGB8::new(0, 0, 0);
+            Timer::after(Duration::from_millis(WALK_STEP_MS)).await;
         }
-
-        // Only the first pixel, so a strip wired in reverse or shifted by one
-        // is visible rather than plausible.
-        write_check(strip, RGB8::new(STRIP_WHITE, STRIP_WHITE, STRIP_WHITE), 1);
-        Timer::after(Duration::from_millis(500)).await;
-
-        write_check(strip, RGB8::new(0, 0, 0), 0);
-        Timer::after(Duration::from_millis(500)).await;
     }
 }
 
-/// Writes a full-length frame with `count` lit pixels at the head and the rest
-/// black, except the last pixel, which stays lit. That constant is the point:
-/// a pixel that misses a frame goes dark for that frame, so a dropout is
-/// visible even though nothing about the pattern changed.
+/// Encodes a frame to the SPI bitstream and hands it to DMA.
 #[cfg(feature = "strip-check")]
-fn write_check(strip: &mut StripLeds<'_>, colour: RGB8, count: usize) {
-    let mut frame = [RGB8::new(0, 0, 0); STRIP_LENGTH];
+fn write_frame(
+    strip: &mut Strip,
+    frame: &[RGB8; STRIP_LENGTH],
+    bits: &mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
+) {
+    let data = encode(frame, bits);
+    let _ = strip.write(data);
+}
 
-    for pixel in frame.iter_mut().take(count) {
-        *pixel = colour;
+/// Three SPI bits per LED bit, GRB order, most significant bit first.
+///
+/// A WS2812 `0` is `100` (0.4 us high, 0.8 us low) and a `1` is `110`
+/// (0.8 us high, 0.4 us low), which at 2.5 MHz lands inside the part's
+/// tolerance. The reset tail is left zero and is never rewritten.
+#[cfg(feature = "strip-check")]
+fn encode<'a>(frame: &[RGB8; STRIP_LENGTH], bits: &'a mut [u8]) -> &'a [u8] {
+    let used = STRIP_BIT_BYTES;
+    bits[..used].fill(0);
+
+    let mut bit = 0;
+    for pixel in frame {
+        for value in [pixel.g, pixel.r, pixel.b] {
+            for shift in (0..8).rev() {
+                set_bit(bits, bit);
+                if (value >> shift) & 1 == 1 {
+                    set_bit(bits, bit + 1);
+                }
+                bit += 3;
+            }
+        }
     }
 
-    frame[STRIP_LENGTH - 1] = STRIP_LAST_PIXEL;
+    &bits[..used + STRIP_RESET_BYTES]
+}
 
-    let _ = strip.write(frame);
+#[cfg(feature = "strip-check")]
+fn set_bit(bits: &mut [u8], index: usize) {
+    bits[index / 8] |= 0x80 >> (index % 8);
 }
 
 #[embassy_executor::task]

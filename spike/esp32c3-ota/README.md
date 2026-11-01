@@ -128,7 +128,7 @@ On boot the firmware reads `otadata` before Wi-Fi starts and repairs it if it is
 
 ## Strip check
 
-`--features strip-check` adds a second RMT channel on GPIO3 (through the level shifter, same wiring as the offcut work) and cycles the first five pixels through red, green, blue, dim white, a single-pixel index check, and off, 500 ms per step. The OTA server keeps running beside it, so the image can be replaced over the air like any other.
+`--features strip-check` drives the strip and **walks one dim pixel down the whole chain**, 300 ms per step, looping. Every tenth pixel is lit green instead of white, so a failure can be counted to rather than guessed at. The chain is 335 pixels — the 35-pixel offcut plus the 300 added to it — so one sweep takes about 100 s; `STRIP_LENGTH` is the constant to change when that changes. The OTA server keeps running beside it, so the image can be replaced over the air like any other.
 
 ```bash
 cargo build --release --features strip-check
@@ -137,36 +137,33 @@ espflash save-image --chip esp32c3 \
 curl -T /tmp/wordclock-strip.bin http://192.168.1.50:3232/ota
 ```
 
-`GET /` reports `strip_check=on` when the driver was created, `failed` when the RMT channel could not be allocated, and `off` for an image built without the feature. The check is deliberately non-fatal: the only way back into the board is over the air, so a missing channel is logged and the server keeps serving.
+`GET /` reports `strip_check=on` when the driver was created, `failed` when the RMT channel could not be allocated, and `off` for an image built without the feature, plus `strip_pixels` for the chain length baked into the image. The check is deliberately non-fatal: the only way back into the board is over the air, so a missing channel is logged and the server keeps serving.
 
-Five pixels at these levels draw at most about 75 mA, well inside the supply. Both drivers ask for a single RMT memory block, which is what keeps the second channel usable; asking for two would take the whole RMT RAM and the on-board indicator would stop working.
+One lit pixel at these levels draws a few milliamps, so a whole sweep stays inside the supply's noise floor. The strip is driven over SPI2 with DMA (GPIO3 routed as MOSI), which leaves the RMT peripheral entirely to the on-board status LED. The encoded bitstream is about 3 KiB and lives in a static, as does the frame being walked.
+
+### Why the strip runs on SPI, not RMT
+
+The C3 gives an RMT channel 48 codes of memory against a frame of 8,042, so the driver has to refill that block from the CPU every 30 µs. In blocking mode the refill happens in a busy-poll loop, and any interrupt that runs past the deadline makes the hardware wrap the block and send it again: the rest of the frame shifts by two pixels per wrap. Measured on a 335-pixel walk, one step's lit pixel appeared about **36 pixels further down the chain** — 18 wraps, roughly 1.1 ms of Wi-Fi interrupt time — and the walk carried on normally afterwards, because only the single lit word made the shift visible.
+
+Writing each frame twice hid it rather than fixing it: the stray pixel became a brief flicker elsewhere in the chain. The fix is to take the CPU out of the timing path. The strip now runs on **SPI2 with DMA at 2.5 MHz, three SPI bits per LED bit**: `0` is `100` (0.4 µs high, 0.8 µs low) and `1` is `110` (0.8 µs high, 0.4 µs low), which is exact at 80 MHz / 32 and inside the WS2812B tolerance. The clock pin is unused, GPIO3 stays the data pin as MOSI, and DMA streams the 3 KiB bitstream out of memory while the CPU services Wi-Fi. With that, a full 335-pixel walk runs with no glitches at all.
+
+Two consequences worth keeping:
+
+- The earlier RMT measurement on the 288-pixel gate frame was clean because that build ran with `frame-loop`, which skips Wi-Fi. RMT is fine for a strip nobody interrupts; it is not fine for a clock that shares the CPU with a radio.
+- The real firmware should use the same transport, and the display backend should treat "CPU in the timing path" as a design smell.
 
 ### Write the whole strip, every frame
 
-The first version of this check wrote only five pixels, and on roughly every third power-up the remaining thirty came up **solid red** and stayed that way. That is not a bug in the pattern. A WS2812 is a shift-register chain: pixels beyond the transmitted length receive no data and keep whatever they latched while the rail came up. On this build the 5 V ramp is slow (1000 µF), and the shifter's input floats until the firmware configures GPIO3; a floating CMOS input can sit high, and a WS2812 reading a line that is high and then goes low shifts `0xFF0000` into every pixel — red, all the way down the chain.
+An early version wrote only five of the 35 pixels, and on roughly every third power-up the rest came up **solid red** and stayed that way. A WS2812 is a shift-register chain: pixels beyond the transmitted length keep whatever they latched when the rail came up. Two power-ups in five flashed the whole strip, red or green; adding a 10 kΩ pull-down to the shifter's input changed that to five in ten on only the first 19-20 pixels; and once the first frame moved from about 2.4 s after reset to about 0.2 s, ten of ten were clean.
 
-Two changes, one firmware and one wiring:
+The colours are what identified the cause. In GRB order red is `0x00FF00` and green is `0xFF0000`, so the same high-then-low burst on the data line lands on different byte boundaries on different power-ups. Firmware sends the same colour every time; noise does not.
 
-- Every frame now covers all 35 pixels, with the ones the pattern does not use set to black, and the strip is cleared once at boot. Any junk is overwritten within a second instead of surviving until the next full frame happens to touch it. Verified over five power cycles on revision 6: two of them flashed the whole strip at power-up (once red, once green) and in **every** case the unused pixels went dark as soon as the first frame arrived.
-- A **10 kΩ pull-down from the shifter's input (pin 2, 1A) to ground** keeps DIN low through the whole power-up. Fitted, it changed the artefact rather than ending it: five of ten power-ups then turned only the first 19–20 pixels red, instead of the whole strip on two of five. It stays, a floating CMOS input being wrong on its own terms, but the prefix was a symptom of when the first frame arrived, not of the resistor.
-- The first frame the firmware sent was also arriving late: the driver is created early, but the write happened after the six-blink revision loop, about 2.4 s after reset, so the strip showed its power-on latch for seconds. Revision 7 sends a full-strip frame immediately after the driver comes up: ten of ten power-ups were then clean, with no red before or after that frame.
-- Revision 7 also surfaced a separate, unresolved observation at the **last pixel** of the offcut: in three of ten power-ups it did not light during the three-second marker frame, and in one case it stayed lit when the pattern took over. Every pixel receives identical data, so this is the tail of the strip rather than the driver — either it has not finished its own power-on reset when the first frame arrives, or that pixel is marginal, which would not be surprising on a cut-down roll that has already had dead pixels removed. Open question: does it ever miss a frame once the pattern is running?
+What the investigation settled, in the order the pieces matter:
 
-The two different flash colours are what identified the cause. In GRB order a red pixel is `0x00FF00` and a green one is `0xFF0000`, so the same high-then-low burst on the data line lands on different byte boundaries on different power-ups. Firmware would send the same colour every time; noise does not.
-
-What actually removed the visible artefact was neither of those on its own, but the timing of the first frame: with the driver writing a full frame as soon as it exists, ten of ten power-ups were clean, against five of ten before. The pull-down is still correct (a floating CMOS input is wrong regardless), and the full-length frame is still required (a short frame cannot clear a tail it never addresses), but the seconds-long gap between reset and the first write was the thing on display.
-
-### The last pixel can be late
-
-Revision 7's run left the **last pixel** dark on three of ten power-ups, and once left it showing a stale colour when the pattern took over. Revision 8 replaced the single early frame with three one-second marker colours (blue, green, red) and added a steady dim-white pixel at the end of the strip, so that a pixel joining late would be visible and a missed frame would show as a dropout. Result: the last pixel lit **from the first marker colour** and held its steady level through the pattern. It was finishing its own power-on reset, not failing.
-
-The production shape, and what revision 9 does, is therefore: write the first frame as soon as the driver exists, write it three times, and make it black. The repetition matters more than it looks, because the clock redraws once per minute — a pixel that misses the first frame would stay wrong for a minute, not for one animation step.
-
-The steady last-pixel marker stays in the strip check as an instrument: if the tail ever does start missing frames, it will be obvious.
-
-The general rule for the clock: never send a short frame. With 300 pixels, a prefix frame leaves the tail at whatever it was, and the tail is most of the clock.
-
-Verified on the bench: revision 4 ran this pattern while the board was powered from the `5V` pin with USB unplugged, and the cycle above was confirmed by eye.
+1. **Write the first frame as soon as the driver exists**, not after status blinking. A 2.4 s gap put the strip's power-up latch on display for seconds.
+2. **Cover every pixel in every frame.** A short frame cannot clear a tail it never addresses, and on the real strip the tail is most of the clock.
+3. **Send the first frame two or three times.** The far end of the chain can still be finishing its own power-on reset when the first frame lands; a single early frame left the last pixel dark on three of ten power-ups. The clock redraws once a minute, so a missed first frame would stay wrong for a minute.
+4. **Keep the 10 kΩ pull-down on the shifter, pin 2 (1A).** An undriven CMOS input is undefined on its own terms. The one combination never measured is an early first frame *without* it, so it is kept on principle rather than because its absence was shown to break the early-frame case.
 
 ## LED status
 

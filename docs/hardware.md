@@ -219,13 +219,14 @@ The strip and the level shifter share the LED 5 V rail; the Pi keeps its own sup
 
 ### Single 5 V rail with the ESP32-C3
 
-The C3 build goes further and drops the second supply: one 5 V rail feeds the controller, the current sensor, and the strip.
+The C3 build goes further and drops the second supply: one 5 V rail feeds the controller, the current sensor, and the strip. The frame hangs on a wall with a single cable to it, carrying 5 V and nothing else: no Ethernet drop, no second supply, and no service access except Wi-Fi. That constraint is why everything shares one rail and why updates go over the air.
 
 - Feed the C3 at the pin **labelled `5V`** on the silkscreen (header position 19 in the 28-pin numbering); boards with other silkscreens call the same pin `VIN`.
 - That pin has no GPIO number. `GPIO19` is USB D+ on header position 25, and `3V3` is a regulated output: neither may be fed 5 V.
 - **Never connect USB while the rail is powered**, and never leave USB connected with the rail off. VBUS and `5V` are the same node, so two supplies would be paralleled with no back-feed protection.
 - Put bulk capacitance plus 100 nF from `5V` to `GND` at the board: at least 100 µF, and the prototype uses 1000 µF. Tap the rail near the supply rather than at the far end. The C3's Wi-Fi transmit peak is about 335 mA and should not have to travel through the LED distribution.
 - Firmware updates go over OTA, so the built clock needs neither USB nor a console. `spike/esp32c3-ota` is the prototype of that path and `spike/esp32c3-ota/README.md` has the commands.
+- The strip is driven over **SPI2 with DMA**, with GPIO3 routed as MOSI, not over RMT. The wiring does not change; only which peripheral drives the pin does. RMT on this chip cannot carry a full frame without the CPU refilling a 48-code buffer every 30 µs, and Wi-Fi interrupts that refill often enough to corrupt frames (see `docs/esp32-c3-spike.md`).
 
 The reasoning, including why a series diode does not substitute for a power mux, is design decision D9 in `openspec/changes/add-power-budget-and-current-sensing/design.md`.
 
