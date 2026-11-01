@@ -53,6 +53,17 @@ The system SHALL transmit each pixel in the green-red-blue order required by the
 - **WHEN** the test pattern requests pure red, pure green, and pure blue
 - **THEN** the strip shows red, green, and blue respectively with no swapped channels
 
+### Requirement: Deterministic start-up frame
+At start-up the system SHALL write a complete black frame as soon as the output transport is available, before any other content or status indication, and SHALL write it more than once. This keeps no pixel holding a value latched while the supply was rising, and catches a pixel that is still completing its own power-on reset when the first frame arrives.
+
+#### Scenario: Strip latched a value at power-up
+- **WHEN** the strip powers up holding a latched or undefined value
+- **THEN** a full-length black frame is written as soon as the transport is ready, and the strip is dark before any clock content appears
+
+#### Scenario: Tail pixel still resetting
+- **WHEN** the far end of the strip is still completing its power-on reset when the first frame arrives
+- **THEN** a later start-up frame lights it correctly, without needing a power cycle
+
 ### Requirement: Periodic refresh
 The system SHALL refresh the current frame at least once per second while the daemon is running, so a transient strip reset or glitch recovers without waiting for the next minute.
 
