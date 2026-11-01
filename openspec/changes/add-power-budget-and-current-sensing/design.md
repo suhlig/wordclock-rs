@@ -4,7 +4,7 @@ Decision numbers here are local to this change; `replace-fadecandy-with-rust` us
 
 ## Context
 
-The build is a 300-pixel WS2812B strip (288 logical plus 12 padding) on a 60 W, 5 V supply, which is 12 A continuous. At the datasheet's 60 mA per lit pixel an all-white frame commands about 18 A; a normal clock frame lights 11–39 pixels, roughly 0.7–2.3 A plus about 0.3 A of quiescent current across 300 pixels. So the exposure is not steady state but any frame that lights the strip.
+The build is a 300-pixel WS2812B strip (288 logical plus 12 padding) on a 60 W, 5 V supply, which is 12 A continuous. The datasheet's 60 mA per lit pixel puts an all-white frame near 18 A, but the strip in hand is gentler: two bench measurements on the 335-pixel chain on 2026-11-01, recorded under *Measured draw* in `docs/hardware.md`, put the drive term at about 11/255 mA per channel count. That scales an all-white 300-pixel frame to roughly 10 A — an extrapolation from two points below full duty, not a measurement. A normal clock frame lights 11–39 pixels, roughly 0.4–1.6 A including quiescent current. So the exposure is not steady state but any frame that lights the strip, and the all-white figure is a reason to keep the limit, not a reason to relax it.
 
 What already exists: the strip is fed through per-row rails in 1.5 mm² solid copper, and an ACS712-20A Hall sensor is installed in the LED branch, so it measures the strip and not the controller. The host-independent core already ends in a corrected `Frame` and a `Display` trait, and the ESP32-C3 has ADC1 on GPIO0–GPIO4 with GPIO3 now carrying the strip data.
 
@@ -32,7 +32,9 @@ Supplier reality shaped one decision: an INA226, INA260 or INA228 could not be b
 
 The configured limit is 9 000 mA, not the supply's 12 A.
 
-Twelve amps is 100 % of nameplate; a 24/7 device should not sit there, and the estimate itself has a tolerance of roughly ±10–20 %. Nine amps is 75 % of rating, leaves room for that error, and is still above the ~2.3 A a worst-case normal frame draws, so the limiter stays inert where it matters.
+Twelve amps is 100 % of nameplate; a 24/7 device should not sit there, and the estimate itself has a tolerance of roughly ±10–20 %. Nine amps is 75 % of rating, leaves room for that error, and is still far above the ~1.6 A a worst-case normal frame draws, so the limiter stays inert where it matters.
+
+Against the measured drive constant the worst case is smaller than this decision assumed: an all-white frame extrapolates to about 10 A, so the limit scales it by roughly 0.9 rather than by half. That makes engaging the limiter a much smaller intervention than planned. It does not argue for relaxing the limit — the 10 A is an extrapolation, and 9 A still holds the supply at 75 % of rating with the estimate's error on top.
 
 Alternatives: 12 A (rejected, no headroom and no derating), 8 A (rejected as needlessly dark for the all-on test with no safety gain), a limit derived from measured current only (rejected, see D4).
 
@@ -52,7 +54,11 @@ The estimate is:
 I_mA = pixels × I_q  +  Σ_pixels (r + g + b) × k_drive
 ```
 
-with `I_q ≈ 1 mA` per pixel and `k_drive` the drive constant in mA per count. The datasheet's 20 mA per channel at full scale puts `k_drive` near 20/255, but the strip in hand should set it: measure all-white once and derive `k_drive = (I_measured − pixels × I_q) / Σ(r + g + b)`. Real strips typically land nearer 45–55 mA per pixel at full white than the 60 mA worst case.
+with `I_q` the quiescent current per pixel and `k_drive` the drive constant in mA per count. The datasheet's 20 mA per channel puts `k_drive` near 20/255; the strip in hand sets it. Two measurements on the 335-pixel chain — an alternating pattern at `0x200801` drawing 0.578 A and the same pattern at `0xee0b01` drawing 2.12 A — differ by 35,112 channel counts for 1,542 mA, so `k_drive ≈ 11/255 mA per count`, about half the datasheet-derived value, or 34 mA per pixel at full white.
+
+Two points rather than one, deliberately. A single all-white measurement needs a supply that can carry about 10 A and still leaves `I_q` entangled with the drive term; two points at modest current solve the slope directly and need neither. The slope is also the robust half of the pair, because anything constant across the two readings — the controller's own draw, above all — cancels in the difference.
+
+The intercept needs one more fact. The two readings give `pixels × I_q + controller ≈ 276 mA`, and that cannot be split without knowing the controller's draw. It matters because the sensor sits in the LED branch, so the estimate is meant to describe the strip alone and must not count the controller. Calibrate `I_q` on the build rather than taking the datasheet's 1 mA: at 300 pixels a 1 mA term alone is 300 mA, which is already the whole measured intercept.
 
 Scaling must account for the quiescent term, or the result undershoots:
 
@@ -97,9 +103,9 @@ Alternatives: per-frame closed-loop control (rejected, oscillates), using the me
 
 ### D8: Keep the existing distribution, thicken only the trunk if needed
 
-1.5 mm² copper is about 11.7 mΩ/m. A row rail carries 1.08 A at full white, or 1.5 A with reserve, so a one-metre 5 V-and-ground pair drops only 26–35 mV. The row rails are already oversized by roughly 7× and should not be changed.
+1.5 mm² copper is about 11.7 mΩ/m. A row rail carries about 0.65 A at full white by the measured drive constant, or 1.0 A with reserve, so a one-metre 5 V-and-ground pair drops only 15–23 mV. The row rails are already oversized by roughly 7× and should not be changed.
 
-The trunk is the only place to look: 16 rows at full white is 17 A, and 9 A limited is still substantial. A 1.5 mm² trunk is acceptable up to about 0.5 m and marginal at 1 m (0.21 V), so a longer trunk, or any hope of the un-limited 17 A case, should move to 2.5–4 mm² while the row rails stay as they are. Terminations matter more than the copper at these currents: screw terminals or soldered joints, never JST or Dupont.
+The trunk is the only place to look: 16 rows at full white is about 10 A by the measured constant, and 9 A limited is still most of that. At 10 A a 1.5 mm² trunk drops about 0.12 V per conductor over a metre, 0.23 V for the pair, so a trunk longer than about half a metre should still move to 2.5–4 mm² while the row rails stay as they are — with the measured constant that sizing is margin against a higher calibration rather than the necessity it looked like at 17 A. Terminations matter more than the copper at these currents: screw terminals or soldered joints, never JST or Dupont.
 
 Alternatives: replacing all rails with 2.5 mm² (rejected, no measurable benefit and much harder to route), moving the supply closer instead (equally valid where the layout allows).
 
@@ -128,7 +134,7 @@ Alternatives and why they lost: keeping the USB supply for the controller and th
 - **Ratiometric drift if the sensor is mis-powered** → D6 powers it from a stable 5 V; on a single 5 V rail, add the second ADC channel on VCC and compensate.
 - **Sensor placement** → the shunt sits in the LED branch, so the controller's own draw is not counted and the estimate and measurement describe the same load; keep it there if the distribution is reworked.
 - **C3 ADC noise and non-linearity** → average 32–64 samples, two-point calibrate, and accept 0.1–0.2 A effective resolution; the M5Stack INA226-10A is the escape hatch.
-- **The ACS712 module's own current path may be rated below the die** → check terminal temperature after a minute of all-white at 12–17 A; the die's 1.2 mΩ is not the module's limitation.
+- **The ACS712 module's own current path may be rated below the die** → check terminal temperature after a minute of all-white at 9–10 A; the die's 1.2 mΩ is not the module's limitation.
 - **The limiter hides a real fault** → it bounds the command, not the load; supply OCP and a fuse stay in the design, and engaging the limiter is logged rather than silent.
 - **Slow trim could alter a parity frame** → normal frames never reach the limit, and the trim only moves when the measurement is sustained above it; if it ever engages, that is logged as a fault condition, not a normal state.
 - **A mis-set limit makes the clock dark** → the limit is validated at startup, the applied scale is logged, and the default is chosen so normal frames are untouched.

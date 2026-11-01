@@ -2,7 +2,7 @@
 
 ## 1. Core power budget
 
-- [ ] 1.1 Add the current estimate as a pure core function over a corrected frame: `pixels × I_q + Σ(r+g+b) × k_drive`, with both constants configurable. Verify with unit tests: an all-black frame returns only the quiescent term, an all-white frame matches the formula, and the result is monotonically increasing with brightness.
+- [ ] 1.1 Add the current estimate as a pure core function over a corrected frame: `pixels × I_q + Σ(r+g+b) × k_drive`, with both constants configurable. Ship `k_drive` at the measured 11/255 mA per count (design D3) rather than the datasheet's 20/255. Verify with unit tests: an all-black frame returns only the quiescent term, an all-white frame matches the formula, and the result is monotonically increasing with brightness.
 - [ ] 1.2 Add the budget step between the corrected frame and the display write, applying one uniform scale when the estimate exceeds the limit. Verify with a test asserting every channel is multiplied by the same factor and that the recomputed estimate is at or below the limit.
 - [ ] 1.3 Handle rounding by stepping the scale down until the recomputed estimate is at or below the limit. Verify with a 300-pixel all-white frame at the limit: the result must not exceed the limit, and no channel may be clamped independently.
 - [ ] 1.4 Verify transparency: render a normal 11–39-pixel frame with the limiter enabled and disabled and assert the two frames are byte-identical.
@@ -16,22 +16,22 @@
 
 ## 3. Calibration and trim
 
-- [ ] 3.1 Add a calibration path that derives `k_drive` from a measured all-white current and the quiescent term. Verify with a test that the derived constant reproduces the input measurement within 1 %.
+- [ ] 3.1 Add a calibration path that solves `k_drive` and `I_q` from two measurements at different brightness — the slope gives `k_drive`, and the intercept gives `pixels × I_q` plus the controller, which must be subtracted before `I_q` is used, because the sensor measures the LED branch only. Verify with a test that the derived constants reproduce both input measurements within 1 %.
 - [ ] 3.2 Implement the slow trim with hysteresis and a bounded rate: reduce when the measurement is sustained above the limit, recover below a configured fraction, and never change more than one step per interval. Verify with a simulated sustained over-current and a subsequent recovery.
 - [ ] 3.3 Verify the trim does not move on a noisy measurement near the limit: feed alternating samples just above and just below the limit and assert the scale is unchanged.
 - [ ] 3.4 Log measured current, supply voltage where available, and applied scale at a configured interval. Verify the log line appears at that interval and not once per frame.
 
 ## 4. Configuration
 
-- [ ] 4.1 Add the limit (default 9 000 mA), `k_drive`, the quiescent constant, and the sensor enable switch to the configuration. Verify that a zero, negative, or absurd limit is rejected at startup with a clear error.
+- [ ] 4.1 Add the limit (default 9 000 mA), `k_drive` (default the measured 11/255 mA per count), the quiescent constant, and the sensor enable switch to the configuration. Verify that a zero, negative, or absurd limit is rejected at startup with a clear error.
 - [ ] 4.2 Add the disable path that restores the pre-change output. Verify that disabling produces byte-identical frames and logs a warning that the supply is not bounded by firmware.
 - [ ] 4.3 Verify the default configuration: a normal clock frame is unchanged, and only an all-white test pattern engages the limiter.
 
 ## 5. Build documentation
 
 - [ ] 5.1 Add the sensor wiring and rationale to `docs/hardware.md`: 5 V from the C3 rather than the measured rail, 10 k/10 k divider, 100 nF, ADC1 pin, and the conversion formula. Verify the connection table and any diagram match design D5 and D6.
-- [ ] 5.2 Record the distribution figures in `docs/hardware.md`: 1.5 mm² row rails are sufficient at 1.1–1.5 A per row, and the trunk moves to 2.5–4 mm² beyond about 0.5 m or for the un-limited 17 A case. Verify the numbers match design D8.
-- [ ] 5.3 Document the all-white calibration procedure and the expected currents (roughly 15–18 A un-limited, about 9 A limited). Verify the procedure can be followed as written without extra explanation.
+- [ ] 5.2 Record the distribution figures in `docs/hardware.md`: 1.5 mm² row rails are sufficient at 0.65–1.0 A per row, and the trunk moves to 2.5–4 mm² beyond about 0.5 m or for the un-limited all-white case, which the measured constant puts near 10 A. Verify the numbers match design D8.
+- [ ] 5.3 Document the two-point calibration procedure and the expected currents: about 0.6 A on the dim bench pattern, 2.1 A on the same pattern in the frame colour at 335 pixels, and roughly 10 A limited-free all-white extrapolated for 300, about 9 A limited. Verify the procedure can be followed as written without extra explanation, and that it warns the all-white figure is an extrapolation.
 
 ## 6. Integration with the real strip
 

@@ -195,7 +195,7 @@ Observed on 2026-11-01 at revision 23: clean. One lit pixel, one dark pixel, rep
 
 - Single 5 V supply into the pin **labelled `5V`** (header position 19), never `3V3`, and never USB plus 5 V at the same time. 1000 µF + 100 nF at the pin.
 - Data path: GPIO3 → SN74AHCT125N pin 2 (1A) → pin 3 (1Y) → 470 Ω → DIN; 10 kΩ from pin 2 to GND; shifter VCC 5 V; common ground.
-- Current model used throughout, from `openspec/changes/add-power-budget-and-current-sensing/design.md`: `I_mA = pixels × 1 mA + Σ(r+g+b) × 20/255 mA`. At 335 pixels the quiescent term is 335 mA and dominates. By this model the fixture frame itself draws about 630 mA — the 500 mA bench limit is already exceeded by the failing frame, which the human should decide about.
+- Current model used throughout, from `openspec/changes/add-power-budget-and-current-sensing/design.md`: `I_mA = pixels × 1 mA + Σ(r+g+b) × 20/255 mA`. At 335 pixels the quiescent term is 335 mA and dominates. By this model the fixture frame itself draws about 630 mA — the 500 mA bench limit is already exceeded by the failing frame, which the human should decide about. The bench later measured the constant at about **11/255 mA** with the ESP attached, roughly half this, and the quiescent term lower too; *Measured draw* in `docs/hardware.md` supersedes this estimate for any sizing decision.
 
 ## Pitfalls that cost time
 
