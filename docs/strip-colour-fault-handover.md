@@ -178,9 +178,16 @@ Diagnostic features in `spike/esp32c3-ota/Cargo.toml`, all implying `strip-check
 | `dense-check` | Same walk carrying `ee0b01`, no marker, 400 ms per step |
 | `fill-check` | Whole chain, one channel at a time, level 6 (~493 mA) |
 | `identity-check` | Static `red, green, blue, yellow, white` run at `IDENTITY_OFFSET`, held still |
+| `boundary-check` | Alternating `0xee0b01` and black down the whole chain, held still |
 | `frame-check` | Renders the 06:30 fixture, holds it, serves `GET /frame` |
 
 `identity-check` is the one that answered the question. Keep it.
+
+`boundary-check` is the one that verifies the answer across the whole chain rather than the first seven pixels. It alternates the fixture frame's own colour, `0xee0b01`, with black — dense bytes, and a blue byte of `0x01`, which is the `0` then `1` shape that produced the stray — so the pixel after every lit one is dark and a stray cannot hide by landing on another lit pixel. A uniform fill is the wrong instrument here: every pixel would receive the same `+0x80` green and the strip would only look uniformly greener. The clean readback is one lit pixel, one dark pixel, repeating to the end; the fault reads as a red/green checkerboard.
+
+That pattern draws roughly 2 A, scaled from 578 mA measured on the dim variant, so it needs a bench supply comfortably above 1 A. `BOUNDARY_COLOUR` in `src/bin/main.rs` documents the dim `0x200801` alternative for a small supply.
+
+Observed on 2026-11-01 at revision 23: clean. One lit pixel, one dark pixel, repeating across all 335 including the offcut junction, in the production orange-red, drawing 2.12 A with the ESP attached. That is the end-to-end verification of the transport that six builds of hypothesis never produced.
 
 `GET /strip?mapping=3bit|4bit` existed for revision 20 only: it switched the bit-cell layout at runtime and reported the waveform, so the fault and the fix could be compared in one session and one power state. That comparison was made and the endpoint is deleted. `GET /` reports the strip check state and the pixel count.
 

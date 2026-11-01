@@ -92,6 +92,11 @@ dense-check = ["strip-check"]
 # Hold a fixed run of known colours at the start of the chain, so the physical
 # pixel can be read back against the logical one. Implies strip-check.
 identity-check = ["strip-check"]
+# Alternate the fixture frame's own colour with black down the whole chain, so
+# every pixel is followed by a dark one. The stray that the four-bit cell fixed
+# landed on the pixel after any pixel ending in a `1`; a uniform fill hides it
+# because every pixel receives the same stray. Implies strip-check.
+boundary-check = ["strip-check"]
 
 [profile.dev]
 # The default debug profile is too slow and too big for resource-constrained devices.

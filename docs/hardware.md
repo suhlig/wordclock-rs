@@ -236,6 +236,12 @@ The 1000 µF sits at the first LED and absorbs the current step when a frame cha
 
 If a fuse is fitted, put it in the 5 V feed to the strip, sized for the supply and the wire, not for the average clock load.
 
+### Measured draw
+
+Two bench readings on the 335-pixel chain with the ESP attached calibrate the current model the power budget asks to set from measurement. Alternating 168 lit pixels in the fixture colour `0xee0b01` drew **2.12 A**; the same pattern in `0x200801` drew **0.578 A**. The difference is 35,112 channel counts for 1,542 mA, so the drive term is about **11/255 mA per count**, roughly half the `20/255` the design assumed, and the fixed term — 335 pixels of quiescent current plus the ESP — is about **276 mA**. Two points, but they fit that line to within a milliamp each across a sixfold range.
+
+Extrapolated, and not measured: an all-white 335-pixel frame is 256,275 counts, so about **11.5 A**. That is just inside the 12 A supply and well above the 9 A limit, where the original model implied 18–20 A and a build that could not be powered. Treat the figure as indicative rather than as a result: current per count is not perfectly linear at full duty, and the rail will sag under a step that size.
+
 ## Rollback
 
 For the Pi path, keep the old SD card and Fadecandy board available as described below. For the ESP32-C3 path, keep the previous OTA image or a USB-reflashable release, and keep the legacy Pi/Fadecandy clock as the ultimate fallback until the stability window closes.

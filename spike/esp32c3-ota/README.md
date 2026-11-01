@@ -143,6 +143,10 @@ One lit pixel at these levels draws a few milliamps, so a whole sweep stays insi
 
 Revision 20 carried a second cell layout and a `GET /strip?mapping=3bit|4bit` switch so the fault and the fix could be compared in one session, on one power state and one temperature. That comparison was made, the four-bit cell removed the fault, and the switch has been deleted; what remains is the single waveform in `src/strip.rs`.
 
+`--features boundary-check` is the pattern that checks the fix across the whole chain rather than the first few pixels: every second pixel carries the frame's own `0xee0b01`, whose blue byte is `0x01` — a `0` followed by a `1`, the shape that produced the stray — and the pixels in between stay black. A uniform fill is the wrong instrument, because every pixel would receive the same `+0x80` green and the strip would only look uniformly greener; with a dark pixel after each lit one, a stray shows up as a lit pixel. The clean readback is one lit, one dark, repeating to the end; the fault read as a red/green checkerboard, 168 times over.
+
+It draws roughly 2 A, scaled from 578 mA measured on the dim variant of the same pattern. For a smaller supply, `BOUNDARY_COLOUR` in `src/bin/main.rs` documents dropping to `0x200801`, which keeps the `0` then `1` ending at about a sixth of the drive.
+
 ### Why the strip runs on SPI, not RMT
 
 The C3 gives an RMT channel 48 codes of memory against a frame of 8,042, so the driver has to refill that block from the CPU every 30 µs. In blocking mode the refill happens in a busy-poll loop, and any interrupt that runs past the deadline makes the hardware wrap the block and send it again: the rest of the frame shifts by two pixels per wrap. Measured on a 335-pixel walk, one step's lit pixel appeared about **36 pixels further down the chain** — 18 wraps, roughly 1.1 ms of Wi-Fi interrupt time — and the walk carried on normally afterwards, because only the single lit word made the shift visible.

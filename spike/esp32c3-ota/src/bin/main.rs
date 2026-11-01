@@ -87,10 +87,12 @@ macro_rules! mk_static {
 
 /// Bump this before every OTA experiment. The on-board LED blinks it at boot
 /// and `GET /` reports it, which is how an update is verified without USB.
-/// It sits at 21: 20 carried the two bit cells and the `GET /strip` switch that
-/// proved the four-bit one fixes the stray pixel, and this image is that fix
-/// with the scaffolding removed.
-const REVISION: u32 = 21;
+/// It sits at 23: 20 carried the two bit cells and the `GET /strip` switch that
+/// proved the four-bit one fixes the stray pixel, 21 was that fix with the
+/// scaffolding removed, 22 added the alternating boundary pattern at a dim
+/// colour, and this one raises that pattern to the frame the clock really
+/// shows.
+const REVISION: u32 = 23;
 
 const OTA_PORT: u16 = 3232;
 const HEADER_MAX: usize = 1024;
@@ -137,7 +139,8 @@ const STRIP_LENGTH: usize = 335;
     feature = "strip-check",
     not(feature = "frame-check"),
     not(feature = "fill-check"),
-    not(feature = "identity-check")
+    not(feature = "identity-check"),
+    not(feature = "boundary-check")
 ))]
 mod walk_pattern {
     use super::Rgb;
@@ -175,7 +178,16 @@ mod walk_pattern {
 /// 335 pixels at this level draw `335 + 335 * 6 * 20/255` = about 493 mA.
 /// Raise it to 24 once a stronger supply feeds the strip: that is about 965 mA
 /// and is bright enough to judge colour across a lit room.
-#[cfg(all(feature = "fill-check", not(feature = "identity-check")))]
+///
+/// Note what this cannot test: level 6 is `0b00000110`, whose last LED bit is a
+/// `0`, so no pixel in this fill can trigger the boundary fault. It proves the
+/// chain is uniformly addressable and nothing about the transport's timing.
+/// `boundary-check` is the pattern for that.
+#[cfg(all(
+    feature = "fill-check",
+    not(feature = "identity-check"),
+    not(feature = "boundary-check")
+))]
 const FILL_LEVEL: u8 = 6;
 
 #[cfg(all(feature = "fill-check", not(feature = "identity-check")))]
@@ -200,7 +212,7 @@ const FILL_REFRAMES: u32 = 5;
 /// pixels, the encoding is right and the walk's oddity is something else. If
 /// the colours come out permuted, it is channel order. If they smear over seven
 /// or eight pixels, one logical pixel is not one chip.
-#[cfg(feature = "identity-check")]
+#[cfg(all(feature = "identity-check", not(feature = "boundary-check")))]
 const IDENTITY_COLOURS: [Rgb; 6] = [
     Rgb::new(238, 0, 0),
     Rgb::new(0, 238, 0),
@@ -210,6 +222,32 @@ const IDENTITY_COLOURS: [Rgb; 6] = [
     Rgb::new(0, 0, 0),
 ];
 
+/// The alternating boundary pattern.
+///
+/// Every pixel that is not black carries the colour the fixture frame really
+/// renders, `0xee0b01`. Its blue byte is `0x01` — a `0` followed by a `1`, the
+/// shape that produced the stray — and its green byte is `0xee`, so the payload
+/// is as dense as the frame the clock shows. The pixel after each lit one is
+/// black, so a stray shows up as a lit pixel rather than as a slightly greener
+/// neighbour, and 168 boundaries are live at once across the whole chain,
+/// including the junction between the offcut and the 300 added to it.
+///
+/// A clean chain reads as one lit pixel, one dark pixel, repeating to the end.
+/// The fixed fault reads as a red/green checkerboard, because every dark pixel
+/// in between picks up `G = 0x80`.
+///
+/// Roughly 2 A, scaled from the 578 mA measured on the dim variant, so it needs
+/// a bench supply comfortably above 1 A. For a small supply, drop it to
+/// `Rgb::new(32, 8, 1)`: that keeps the `0` then `1` ending at about a sixth of
+/// the drive, at the cost of a hue that is more orange and bytes that are
+/// sparse.
+#[cfg(feature = "boundary-check")]
+const BOUNDARY_COLOUR: Rgb = Rgb::new(0xee, 0x0b, 0x01);
+
+/// Every second pixel is lit, the rest stay black.
+#[cfg(feature = "boundary-check")]
+const BOUNDARY_PERIOD: usize = 2;
+
 /// Where the identity run starts.
 ///
 /// Moving it is the point of the constant. At offset 0 the reversed run lighted
@@ -217,7 +255,7 @@ const IDENTITY_COLOURS: [Rgb; 6] = [
 /// the run. At offset 1 the run is pixels 1 to 5, so if the stray green moves to
 /// pixel 6 the fault travels with the data and lives in the transport; if it
 /// stays at pixel 5, that LED is faulty instead.
-#[cfg(feature = "identity-check")]
+#[cfg(all(feature = "identity-check", not(feature = "boundary-check")))]
 const IDENTITY_OFFSET: usize = 1;
 
 /// The DMA buffer: one encoded frame plus its reset tail.
@@ -1180,29 +1218,64 @@ async fn strip_check(
     frame: &'static mut [Rgb; STRIP_LENGTH],
     bits: &'static mut [u8; STRIP_BUFFER_BYTES],
 ) {
-    #[cfg(feature = "identity-check")]
+    #[cfg(feature = "boundary-check")]
+    hold_boundary(strip, frame, bits).await;
+
+    #[cfg(all(feature = "identity-check", not(feature = "boundary-check")))]
     hold_identity(strip, frame, bits).await;
 
-    #[cfg(all(feature = "fill-check", not(feature = "identity-check")))]
+    #[cfg(all(
+        feature = "fill-check",
+        not(feature = "identity-check"),
+        not(feature = "boundary-check")
+    ))]
     hold_fill(strip, frame, bits).await;
 
     #[cfg(all(
         feature = "frame-check",
         not(feature = "fill-check"),
-        not(feature = "identity-check")
+        not(feature = "identity-check"),
+        not(feature = "boundary-check")
     ))]
     hold_fixture(strip, frame, bits).await;
 
     #[cfg(not(any(
         feature = "frame-check",
         feature = "fill-check",
-        feature = "identity-check"
+        feature = "identity-check",
+        feature = "boundary-check"
     )))]
     walk(strip, frame, bits).await;
 }
 
+/// Holds the alternating boundary pattern, re-sent once a second.
+///
+/// Static rather than a walk, because the readback is a count: on a clean chain
+/// the lit pixels are every second one and the dark ones in between stay dark.
+/// Re-sending it means a strip that reset itself recovers without a power cycle,
+/// and a marginal fault has 168 boundaries per frame to show itself on.
+#[cfg(feature = "boundary-check")]
+async fn hold_boundary(
+    strip: &'static mut Strip,
+    frame: &'static mut [Rgb; STRIP_LENGTH],
+    bits: &'static mut [u8; STRIP_BUFFER_BYTES],
+) -> ! {
+    for (index, slot) in frame.iter_mut().enumerate() {
+        *slot = if index.is_multiple_of(BOUNDARY_PERIOD) {
+            BOUNDARY_COLOUR
+        } else {
+            Rgb::BLACK
+        };
+    }
+
+    loop {
+        write_frame(strip, frame, bits);
+        Timer::after(Duration::from_secs(1)).await;
+    }
+}
+
 /// Holds a fixed run of known colours at the start of the chain.
-#[cfg(feature = "identity-check")]
+#[cfg(all(feature = "identity-check", not(feature = "boundary-check")))]
 async fn hold_identity(
     strip: &'static mut Strip,
     frame: &'static mut [Rgb; STRIP_LENGTH],
@@ -1226,7 +1299,11 @@ async fn hold_identity(
 /// The frame the clock renders is already uniform, so identical bytes to every
 /// pixel are the sharpest transport test available: whatever the chain shows
 /// here was not chosen by the colour code.
-#[cfg(all(feature = "fill-check", not(feature = "identity-check")))]
+#[cfg(all(
+    feature = "fill-check",
+    not(feature = "identity-check"),
+    not(feature = "boundary-check")
+))]
 async fn hold_fill(
     strip: &'static mut Strip,
     frame: &'static mut [Rgb; STRIP_LENGTH],
@@ -1249,7 +1326,8 @@ async fn hold_fill(
 #[cfg(all(
     feature = "frame-check",
     not(feature = "fill-check"),
-    not(feature = "identity-check")
+    not(feature = "identity-check"),
+    not(feature = "boundary-check")
 ))]
 async fn hold_fixture(
     strip: &'static mut Strip,
@@ -1274,7 +1352,8 @@ async fn hold_fixture(
     not(any(
         feature = "frame-check",
         feature = "fill-check",
-        feature = "identity-check"
+        feature = "identity-check",
+        feature = "boundary-check"
     ))
 ))]
 async fn walk(
