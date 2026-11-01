@@ -2,6 +2,15 @@
 
 This supersedes the earlier state in `HANDOFF.md` for the strip-transport question only. It exists because the colour fault was chased for several rounds along a wrong theory, and the next model should not repeat that.
 
+**Rev 20 supersedes the "immediate next steps" and the timing hypothesis below, and the fix is confirmed on the strip.** The transport no longer derives its own timings: `src/strip.rs` holds the SPI clock, one bit cell per mapping, and the reset length, and its host tests derive `T0H`, `T0L`, `T1H`, `T1L` and the reset from those and check them against the WS2812B datasheet window. Rev 20 defaults to four SPI bits per LED bit (`0` → `1000`, `1` → `1100`) at 2.5 MHz, which gives `T0H` 400, `T0L` 1200, `T1H` 800, `T1L` 800 and a 448 µs reset. The two pulses that carry data are unchanged from the three-bit mapping; only the two gaps got longer, so `GET /strip?mapping=3bit|4bit` changes exactly one variable between the failing and the fixed stream. The rest of this document is the record of how the fault was found, and its reasoning errors still apply.
+
+Observed on 2026-11-01 on the bench chain at revision 20: `GET /strip?mapping=3bit` reproduces the stray pixel after `white`, and `GET /strip?mapping=4bit` removes it. Same build, same session, same rail and temperature, no reboot between the two, and the only difference is the gap after a `1` — 400 ns against 800 ns. The fault is therefore a property of the inter-bit gap at the pixel boundary, not of the data, the encoder, the clock, the shifter, the supply or the chain. The switch and the second cell existed only for that comparison and have since been deleted; the waveform that remains is the four-bit one, and `src/strip.rs` is its definition.
+
+Two conclusions here were wrong and are worth keeping as corrections:
+
+- The strip is a WS2812B for the whole life of the project, so the waveform at 2.5 MHz was never outside the published window. "Three SPI bits is illegal for this part" was an inference from a misread of `HANDOFF.md`, not a fact.
+- `ws2812-spi` would not have fixed it. Its cell for a `1` is `1110`, so its gap after a `1` is also exactly one SPI bit — 312 ns at its usual 3.2 MHz, which is shorter than the 400 ns that fails here. The handover's step 2 is withdrawn.
+
 ## Summary
 
 The clock core renders correctly and the encoder's byte layout is proven correct by a static readback test. The remaining fault is a **single LED bit slipping across a pixel boundary**: when a pixel's last LED bit is `1`, the next pixel's first bit is read as `1` as well. That one rule explains every wrong colour reported so far, including the original "simulator red, strip not red" complaint. A static readback test isolated it; the moving-pixel tests had obscured it.
@@ -135,15 +144,15 @@ The pattern across the whole session: tests were designed around what was conven
 
 ## Immediate next steps, in order
 
-1. **Read back revision 19, then record the result here.** It is the same static identity frame with the SPI clock lowered to `STRIP_KHZ = 2_222` (from 2.5 MHz), which makes `T1L` 0.45 µs and `T1H` 0.9 µs. If the stray at pixel 6 disappears, the fault is timing margin and the clock is the fix. If it persists unchanged, the clock is not the lever. **This has not been done, so the state is unknown.**
-2. **Confirm whether `ws2812-spi` should be used instead of the hand-rolled encoder.** The host crate already depends on `ws2812-spi = { version = "0.5", features = ["std"], optional = true }` under its `hardware` feature, and there is *no* Pi backend in the tree — `src/display.rs` mentions `rppal` and `ws2812-spi` only in a doc comment. The intended direction is presumably to drive the ESP32-C3 SPI bus through the crate (`embedded_hal::spi::SpiBus` on `SpiDma`) and delete `encode`/`set_bit` from `spike/esp32c3-ota/src/bin/main.rs`. **Ask the human before asserting the crate's encoding details** — do not guess the bits-per-bit or the required SPI frequency. Read the crate source, which lives in the cargo registry outside the project.
-3. **If timing is not the lever and the library is not adopted,** the definitive instrument is a wire capture: GPIO3 into the Pico at 24 MS/s, decoded with the sigrok `rgb_led_ws281x` decoder, compared against `GET /frame`. That settles whether the wire carries the stray bit or the strip invents it. The recipe is in the sibling `sigrok-tutorial` repo (`content/appendix/cli-cookbook.md`, WS2812 capture at `samplerate=24000000 --channels D2 --samples 380000`).
+The transport question is closed. What is left is cleanup, and one thing that is deliberately still unproven.
+
+1. **Done: the A/B scaffolding is deleted.** `Mapping`, `STRIP_LEGACY_MAPPING`, `query_value` and the `/strip` endpoint existed only so the two streams could be compared in one session, and they are gone; `src/strip.rs` now describes one waveform, `Waveform::new` and `encode` take no mapping, and the regression test that pinned the three-bit gap went with the mapping. The invariant it protected is asserted directly instead: `the_gaps_are_never_shorter_than_nominal` fails if the gap after a `1` ever drops to the value that produced the stray.
+2. **Record the waveform where an installer will see it.** `docs/hardware.md` and design D19 already carry the four-bit description; check both still match `src/strip.rs`, because that module is the source of truth and the prose is a summary.
+3. **The mechanism is still not proven, and that is now acceptable.** A longer gap fixes it, but why a 400 ns gap at the 24-bit rollover corrupts exactly one bit is not established. The instrument is a Pico on GPIO3 at 24 MS/s with `scripts/capture-ws2812.sh`; if this ever recurs, that is the first thing to do rather than another round of firmware hypotheses. Note what the history shows: five builds were spent reasoning from the datasheet before one build that switched a single variable settled it.
 
 ## Repository state
 
-HEAD is `7873ad4 Add strip payload diagnostics for the fill and dense cases`, which contains `fill-check` and `dense-check`. Everything after that is **uncommitted**: the `identity-check` feature and `IDENTITY_OFFSET`, revisions 16 through 19, the `STRIP_KHZ` clock change, the consolidation of the walk constants into a `walk_pattern` module, and this document. The tree is otherwise clean.
-
-Also uncommitted and worth keeping: the default no-feature build was broken before this session — `walk` was gated without requiring `strip-check`, so it referenced `Strip` and `STRIP_LENGTH` where they did not exist. That gate and two unused imports are now correct, and every feature combination builds warning-free.
+The whole investigation through this document is committed at `18f1c96`. Revision 20 replaces the hand-derived bit cell with `src/strip.rs` — the waveform as data plus the tests that check it against the datasheet — wires it into `write_frame`, and briefly shipped a runtime switch so the old and new streams could be compared on one build; the switch is gone now that the comparison confirmed the fix. It also fixes a real build break that predates it: `STRIP_BIT_BYTES` had lost its `#[cfg(feature = "strip-check")]` and referenced a gated-out `STRIP_LENGTH`, so `cargo check` with no features failed with `E0425`. Every feature combination now builds warning-free, and `cargo clippy` is clean for the default and `identity-check` builds.
 
 `openspec validate --strict --changes` passes for both changes at the time of writing (2 passed, 0 failed). Run it with `--changes`; a bare `openspec validate` reports "Nothing to validate".
 
@@ -172,6 +181,8 @@ Diagnostic features in `spike/esp32c3-ota/Cargo.toml`, all implying `strip-check
 | `frame-check` | Renders the 06:30 fixture, holds it, serves `GET /frame` |
 
 `identity-check` is the one that answered the question. Keep it.
+
+`GET /strip?mapping=3bit|4bit` existed for revision 20 only: it switched the bit-cell layout at runtime and reported the waveform, so the fault and the fix could be compared in one session and one power state. That comparison was made and the endpoint is deleted. `GET /` reports the strip check state and the pixel count.
 
 ## Hardware and power notes
 

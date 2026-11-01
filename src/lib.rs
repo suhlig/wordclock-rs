@@ -17,6 +17,7 @@ pub mod daemon;
 pub mod display;
 pub mod frame;
 pub mod sim;
+pub mod strip;
 pub mod timezone;
 
 /// Number of columns in the 18x16 word grid.

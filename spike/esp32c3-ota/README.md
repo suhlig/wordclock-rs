@@ -137,15 +137,19 @@ espflash save-image --chip esp32c3 \
 curl -T /tmp/wordclock-strip.bin http://192.168.1.50:3232/ota
 ```
 
-`GET /` reports `strip_check=on` when the driver was created, `failed` when the RMT channel could not be allocated, and `off` for an image built without the feature, plus `strip_pixels` for the chain length baked into the image. The check is deliberately non-fatal: the only way back into the board is over the air, so a missing channel is logged and the server keeps serving.
+`GET /` reports `strip_check=on` when the driver was created, `failed` when the SPI+DMA driver could not be set up, and `off` for an image built without the feature, plus `strip_pixels` for the chain length baked into the image. The check is deliberately non-fatal: the only way back into the board is over the air, so a missing driver is logged and the server keeps serving.
 
-One lit pixel at these levels draws a few milliamps, so a whole sweep stays inside the supply's noise floor. The strip is driven over SPI2 with DMA (GPIO3 routed as MOSI), which leaves the RMT peripheral entirely to the on-board status LED. The encoded bitstream is about 3 KiB and lives in a static, as does the frame being walked.
+One lit pixel at these levels draws a few milliamps, so a whole sweep stays inside the supply's noise floor. The strip is driven over SPI2 with DMA (GPIO3 routed as MOSI), which leaves the RMT peripheral entirely to the on-board status LED. The encoded bitstream is about 4 KiB and lives in a static, as does the frame being walked.
+
+Revision 20 carried a second cell layout and a `GET /strip?mapping=3bit|4bit` switch so the fault and the fix could be compared in one session, on one power state and one temperature. That comparison was made, the four-bit cell removed the fault, and the switch has been deleted; what remains is the single waveform in `src/strip.rs`.
 
 ### Why the strip runs on SPI, not RMT
 
 The C3 gives an RMT channel 48 codes of memory against a frame of 8,042, so the driver has to refill that block from the CPU every 30 µs. In blocking mode the refill happens in a busy-poll loop, and any interrupt that runs past the deadline makes the hardware wrap the block and send it again: the rest of the frame shifts by two pixels per wrap. Measured on a 335-pixel walk, one step's lit pixel appeared about **36 pixels further down the chain** — 18 wraps, roughly 1.1 ms of Wi-Fi interrupt time — and the walk carried on normally afterwards, because only the single lit word made the shift visible.
 
-Writing each frame twice hid it rather than fixing it: the stray pixel became a brief flicker elsewhere in the chain. The fix is to take the CPU out of the timing path. The strip now runs on **SPI2 with DMA at 2.5 MHz, three SPI bits per LED bit**: `0` is `100` (0.4 µs high, 0.8 µs low) and `1` is `110` (0.8 µs high, 0.4 µs low), which is exact at 80 MHz / 32 and inside the WS2812B tolerance. The clock pin is unused, GPIO3 stays the data pin as MOSI, and DMA streams the 3 KiB bitstream out of memory while the CPU services Wi-Fi. With that, a full 335-pixel walk runs with no glitches at all.
+Writing each frame twice hid it rather than fixing it: the stray pixel became a brief flicker elsewhere in the chain. The fix is to take the CPU out of the timing path. The strip runs on **SPI2 with DMA at 2.5 MHz, four SPI bits per LED bit**: `0` is `1000` (0.4 µs high, 1.2 µs low) and `1` is `1100` (0.8 µs high, 0.8 µs low). The clock pin is unused, GPIO3 stays the data pin as MOSI, and DMA streams the 4 KiB bitstream out of memory while the CPU services Wi-Fi. With that, a full 335-pixel walk runs with no glitches at all.
+
+The first SPI build used **three** SPI bits per LED bit, which ties the gap after a `1` to one clock — 400 ns at 2.5 MHz, and it cannot exceed 475 ns at any clock that keeps `T1H` inside its window. That gap is where a pixel ending in `1` produced a stray pixel behind it, confirmed by switching between the two cells on one build. Four bits decouple the pulse from the gap. The clock, the cell and the reset live in `src/strip.rs`, and that module's host tests derive `T0H`, `T0L`, `T1H`, `T1L` and the reset from them and check them against the WS2812B datasheet; do not reintroduce a tuned clock constant here.
 
 Two consequences worth keeping:
 

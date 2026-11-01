@@ -27,3 +27,6 @@ pub mod color;
 
 #[path = "../../../src/frame.rs"]
 pub mod frame;
+
+#[path = "../../../src/strip.rs"]
+pub mod strip;

@@ -60,10 +60,14 @@ use static_cell::StaticCell;
 use esp32c3_ota::LOGICAL_PIXELS;
 #[cfg(feature = "frame-check")]
 use esp32c3_ota::clock;
+#[cfg(feature = "strip-check")]
+use esp32c3_ota::color::Rgb;
 #[cfg(feature = "frame-check")]
 use esp32c3_ota::color::{ColorPicker, DEFAULT_BIRTHDAYS, GammaLut};
 #[cfg(feature = "frame-check")]
 use esp32c3_ota::frame::Frame;
+#[cfg(feature = "strip-check")]
+use esp32c3_ota::strip;
 
 use Outcome::{KeepRunning, Restart};
 
@@ -83,9 +87,10 @@ macro_rules! mk_static {
 
 /// Bump this before every OTA experiment. The on-board LED blinks it at boot
 /// and `GET /` reports it, which is how an update is verified without USB.
-/// It sits at 13: the strip check, the boot-order work, the walking check, the
-/// move from RMT to SPI with DMA, and the fixture-frame parity build.
-const REVISION: u32 = 19;
+/// It sits at 21: 20 carried the two bit cells and the `GET /strip` switch that
+/// proved the four-bit one fixes the stray pixel, and this image is that fix
+/// with the scaffolding removed.
+const REVISION: u32 = 21;
 
 const OTA_PORT: u16 = 3232;
 const HEADER_MAX: usize = 1024;
@@ -135,20 +140,20 @@ const STRIP_LENGTH: usize = 335;
     not(feature = "identity-check")
 ))]
 mod walk_pattern {
-    use super::RGB8;
+    use super::Rgb;
 
     #[cfg(not(feature = "dense-check"))]
     pub const STEP_MS: u64 = 300;
     #[cfg(not(feature = "dense-check"))]
-    pub const PIXEL: RGB8 = RGB8::new(16, 16, 16);
+    pub const PIXEL: Rgb = Rgb::new(16, 16, 16);
     /// Every tenth pixel is green instead of white, so a failure can be counted.
     #[cfg(not(feature = "dense-check"))]
-    pub const MARKER: RGB8 = RGB8::new(0, 16, 0);
+    pub const MARKER: Rgb = Rgb::new(0, 16, 0);
 
     #[cfg(feature = "dense-check")]
     pub const STEP_MS: u64 = 400;
     #[cfg(feature = "dense-check")]
-    pub const PIXEL: RGB8 = RGB8::new(0xee, 0x0b, 0x01);
+    pub const PIXEL: Rgb = Rgb::new(0xee, 0x0b, 0x01);
     /// Deliberately the same colour as [`PIXEL`].
     ///
     /// A marker made every tenth pixel green by design, which hid the thing we
@@ -156,7 +161,7 @@ mod walk_pattern {
     /// colour for every step, a stray green can only be a stale byte left in the
     /// bitstream. Counting is no longer possible, which is the price.
     #[cfg(feature = "dense-check")]
-    pub const MARKER: RGB8 = PIXEL;
+    pub const MARKER: Rgb = PIXEL;
 
     pub const MARKER_EVERY: usize = 10;
 }
@@ -170,20 +175,20 @@ mod walk_pattern {
 /// 335 pixels at this level draw `335 + 335 * 6 * 20/255` = about 493 mA.
 /// Raise it to 24 once a stronger supply feeds the strip: that is about 965 mA
 /// and is bright enough to judge colour across a lit room.
-#[cfg(feature = "fill-check")]
+#[cfg(all(feature = "fill-check", not(feature = "identity-check")))]
 const FILL_LEVEL: u8 = 6;
 
-#[cfg(feature = "fill-check")]
-const FILL_COLOURS: [RGB8; 4] = [
-    RGB8::new(FILL_LEVEL, 0, 0),
-    RGB8::new(0, FILL_LEVEL, 0),
-    RGB8::new(0, 0, FILL_LEVEL),
-    RGB8::new(0, 0, 0),
+#[cfg(all(feature = "fill-check", not(feature = "identity-check")))]
+const FILL_COLOURS: [Rgb; 4] = [
+    Rgb::new(FILL_LEVEL, 0, 0),
+    Rgb::new(0, FILL_LEVEL, 0),
+    Rgb::new(0, 0, FILL_LEVEL),
+    Rgb::new(0, 0, 0),
 ];
 
 /// Reframes per fill colour, one per second: long enough to walk the whole
 /// chain, and a strip that reset itself recovers without a power cycle.
-#[cfg(feature = "fill-check")]
+#[cfg(all(feature = "fill-check", not(feature = "identity-check")))]
 const FILL_REFRAMES: u32 = 5;
 
 /// A fixed run of known colours at the start of the chain, held still.
@@ -196,13 +201,13 @@ const FILL_REFRAMES: u32 = 5;
 /// the colours come out permuted, it is channel order. If they smear over seven
 /// or eight pixels, one logical pixel is not one chip.
 #[cfg(feature = "identity-check")]
-const IDENTITY_COLOURS: [RGB8; 6] = [
-    RGB8::new(238, 0, 0),
-    RGB8::new(0, 238, 0),
-    RGB8::new(0, 0, 238),
-    RGB8::new(238, 238, 0),
-    RGB8::new(255, 255, 255),
-    RGB8::new(0, 0, 0),
+const IDENTITY_COLOURS: [Rgb; 6] = [
+    Rgb::new(238, 0, 0),
+    Rgb::new(0, 238, 0),
+    Rgb::new(0, 0, 238),
+    Rgb::new(238, 238, 0),
+    Rgb::new(255, 255, 255),
+    Rgb::new(0, 0, 0),
 ];
 
 /// Where the identity run starts.
@@ -215,28 +220,14 @@ const IDENTITY_COLOURS: [RGB8; 6] = [
 #[cfg(feature = "identity-check")]
 const IDENTITY_OFFSET: usize = 1;
 
-/// WS2812 through SPI: three SPI bits per LED bit, so a `0` bit is `100`
-/// (0.4 us high, 0.8 us low) and a `1` bit is `110` (0.8 us high, 0.4 us low).
+/// The DMA buffer: one encoded frame plus its reset tail.
 ///
-/// The point of SPI here is DMA: the peripheral shifts the bits out of memory
-/// with no CPU involvement, which is what RMT cannot do on this chip.
-///
-/// The clock is 2.22 MHz rather than 2.5 MHz because the strip mis-read one bit
-/// across a pixel boundary whenever a pixel ended in a `1`: at 2.5 MHz that
-/// leaves only 0.4 us between the `1` and the next pixel's leading `0`, which is
-/// the tight end of the WS2812B tolerance. At 2.22 MHz the gap is 0.45 us and
-/// `T1H` grows to 0.9 us, while `T0H` stays at 0.45 us, inside its 0.55 us max.
-///
-/// This change has not been read back on the strip. Whether the stray pixel goes
-/// away is unknown; see `docs/strip-colour-fault-handover.md`.
+/// The waveform itself is not defined here. The SPI clock, the bit cell and the
+/// reset length are in `src/strip.rs`, and that module's host tests derive the
+/// four pulse widths and the reset from them and check them against the
+/// `WS2812B` datasheet window. Nothing about the timing is tuned in this file.
 #[cfg(feature = "strip-check")]
-const STRIP_KHZ: u32 = 2_222;
-const STRIP_BIT_BYTES: usize = STRIP_LENGTH * 9;
-
-/// Trailing zero bytes hold the data line low for a reset. At 2.5 MHz, 20 bytes
-/// are 160 bit times, 64 us, comfortably past the 50 us the strip needs.
-#[cfg(feature = "strip-check")]
-const STRIP_RESET_BYTES: usize = 20;
+const STRIP_BUFFER_BYTES: usize = strip::buffer_len(STRIP_LENGTH);
 
 #[cfg(feature = "strip-check")]
 type Strip = SpiDma<'static, esp_hal::Blocking>;
@@ -252,11 +243,12 @@ static STRIP: StaticCell<Strip> = StaticCell::new();
 
 /// The frame being walked, about a kilobyte, so also a static.
 #[cfg(feature = "strip-check")]
-static STRIP_FRAME: StaticCell<[RGB8; STRIP_LENGTH]> = StaticCell::new();
+static STRIP_FRAME: StaticCell<[Rgb; STRIP_LENGTH]> = StaticCell::new();
 
-/// The encoded bitstream handed to DMA: about 3 KiB for 335 pixels.
+/// The encoded bitstream handed to DMA: 4 KiB for 335 pixels at four bits per
+/// LED bit, plus the reset tail.
 #[cfg(feature = "strip-check")]
-static STRIP_BITS: StaticCell<[u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES]> = StaticCell::new();
+static STRIP_BITS: StaticCell<[u8; STRIP_BUFFER_BYTES]> = StaticCell::new();
 
 /// A byte buffer with flash-friendly alignment, so the flash layer never has
 /// to stage a copy through its own sector buffer.
@@ -293,7 +285,7 @@ const FIXTURE_MINUTE: u32 = 30;
     reason = "the gamma LUT is a bounded table and lives in the future or on the \
     server path, not in a hot loop"
 )]
-fn render_fixture() -> Result<(alloc::vec::Vec<RGB8>, String), &'static str> {
+fn render_fixture() -> Result<(alloc::vec::Vec<Rgb>, String), &'static str> {
     let date = chrono::NaiveDate::from_ymd_opt(FIXTURE_YEAR, FIXTURE_MONTH, FIXTURE_DAY)
         .ok_or("invalid fixture date")?;
 
@@ -325,12 +317,7 @@ fn render_fixture() -> Result<(alloc::vec::Vec<RGB8>, String), &'static str> {
     }
     let _ = writeln!(text, "END");
 
-    let pixels = corrected
-        .iter()
-        .map(|color| RGB8::new(color.r, color.g, color.b))
-        .collect();
-
-    Ok((pixels, text))
+    Ok((corrected, text))
 }
 
 fn set_led(led: &mut Leds<'_>, color: RGB8) {
@@ -629,8 +616,8 @@ fn describe<T: core::fmt::Debug>(value: Option<T>) -> String {
     }
 }
 
-/// `off` when this image has no strip check, `failed` when the RMT channel could
-/// not be set up, `on` when it is walking.
+/// `off` when this image has no strip check, `failed` when the SPI+DMA driver
+/// could not be set up, `on` when it is driving the chain.
 fn strip_state() -> &'static str {
     #[cfg(feature = "strip-check")]
     {
@@ -1010,7 +997,7 @@ async fn main(spawner: Spawner) -> ! {
     let strip = match Spi::new(
         peripherals.SPI2,
         SpiConfig::default()
-            .with_frequency(Rate::from_khz(STRIP_KHZ))
+            .with_frequency(Rate::from_khz(strip::SPI_KHZ))
             .with_mode(Mode::_0),
     ) {
         Ok(spi) => {
@@ -1036,8 +1023,8 @@ async fn main(spawner: Spawner) -> ! {
     #[cfg(feature = "strip-check")]
     if let Some(strip) = strip {
         let strip = STRIP.init(strip);
-        let frame = STRIP_FRAME.init([RGB8::new(0, 0, 0); STRIP_LENGTH]);
-        let bits = STRIP_BITS.init([0u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES]);
+        let frame = STRIP_FRAME.init([Rgb::BLACK; STRIP_LENGTH]);
+        let bits = STRIP_BITS.init([0u8; STRIP_BUFFER_BYTES]);
 
         for _ in 0..3 {
             write_frame(strip, frame, bits);
@@ -1185,15 +1172,13 @@ async fn connection(mut controller: WifiController<'static>) {
     }
 }
 
-/// Wiring check for the offcut strip on GPIO3: the primaries, a dim white, a
-/// single-pixel index check, then off. It runs beside the OTA server so the
-/// image can be replaced over the air from a phone or a shell.
+/// Drives the strip beside the OTA server, with the diagnostic the build selects.
 #[cfg(feature = "strip-check")]
 #[embassy_executor::task]
 async fn strip_check(
     strip: &'static mut Strip,
-    frame: &'static mut [RGB8; STRIP_LENGTH],
-    bits: &'static mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
+    frame: &'static mut [Rgb; STRIP_LENGTH],
+    bits: &'static mut [u8; STRIP_BUFFER_BYTES],
 ) {
     #[cfg(feature = "identity-check")]
     hold_identity(strip, frame, bits).await;
@@ -1220,10 +1205,10 @@ async fn strip_check(
 #[cfg(feature = "identity-check")]
 async fn hold_identity(
     strip: &'static mut Strip,
-    frame: &'static mut [RGB8; STRIP_LENGTH],
-    bits: &'static mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
+    frame: &'static mut [Rgb; STRIP_LENGTH],
+    bits: &'static mut [u8; STRIP_BUFFER_BYTES],
 ) -> ! {
-    frame.fill(RGB8::new(0, 0, 0));
+    frame.fill(Rgb::BLACK);
     for (offset, colour) in IDENTITY_COLOURS.iter().enumerate() {
         if let Some(slot) = frame.get_mut(IDENTITY_OFFSET + offset) {
             *slot = *colour;
@@ -1241,11 +1226,11 @@ async fn hold_identity(
 /// The frame the clock renders is already uniform, so identical bytes to every
 /// pixel are the sharpest transport test available: whatever the chain shows
 /// here was not chosen by the colour code.
-#[cfg(feature = "fill-check")]
+#[cfg(all(feature = "fill-check", not(feature = "identity-check")))]
 async fn hold_fill(
     strip: &'static mut Strip,
-    frame: &'static mut [RGB8; STRIP_LENGTH],
-    bits: &'static mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
+    frame: &'static mut [Rgb; STRIP_LENGTH],
+    bits: &'static mut [u8; STRIP_BUFFER_BYTES],
 ) -> ! {
     loop {
         for colour in FILL_COLOURS {
@@ -1261,11 +1246,15 @@ async fn hold_fill(
 
 /// Shows the fixture frame and rewrites it every second, so a strip reset
 /// recovers without a power cycle.
-#[cfg(all(feature = "frame-check", not(feature = "fill-check")))]
+#[cfg(all(
+    feature = "frame-check",
+    not(feature = "fill-check"),
+    not(feature = "identity-check")
+))]
 async fn hold_fixture(
     strip: &'static mut Strip,
-    frame: &'static mut [RGB8; STRIP_LENGTH],
-    bits: &'static mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
+    frame: &'static mut [Rgb; STRIP_LENGTH],
+    bits: &'static mut [u8; STRIP_BUFFER_BYTES],
 ) -> ! {
     let (pixels, _) = render_fixture().expect("the fixture frame must render");
 
@@ -1290,8 +1279,8 @@ async fn hold_fixture(
 ))]
 async fn walk(
     strip: &'static mut Strip,
-    frame: &'static mut [RGB8; STRIP_LENGTH],
-    bits: &'static mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
+    frame: &'static mut [Rgb; STRIP_LENGTH],
+    bits: &'static mut [u8; STRIP_BUFFER_BYTES],
 ) -> ! {
     loop {
         for index in 0..STRIP_LENGTH {
@@ -1303,7 +1292,7 @@ async fn walk(
 
             write_frame(strip, frame, bits);
 
-            frame[index] = RGB8::new(0, 0, 0);
+            frame[index] = Rgb::BLACK;
             Timer::after(Duration::from_millis(walk_pattern::STEP_MS)).await;
         }
     }
@@ -1313,42 +1302,17 @@ async fn walk(
 #[cfg(feature = "strip-check")]
 fn write_frame(
     strip: &mut Strip,
-    frame: &[RGB8; STRIP_LENGTH],
-    bits: &mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
+    frame: &[Rgb; STRIP_LENGTH],
+    bits: &mut [u8; STRIP_BUFFER_BYTES],
 ) {
-    let data = encode(frame, bits);
-    let _ = strip.write(data);
-}
+    let Some(data) = strip::encode(frame, bits) else {
+        error!("the strip buffer cannot hold {STRIP_LENGTH} pixels");
+        return;
+    };
 
-/// Three SPI bits per LED bit, GRB order, most significant bit first.
-///
-/// A WS2812 `0` is `100` (0.4 us high, 0.8 us low) and a `1` is `110`
-/// (0.8 us high, 0.4 us low), which at 2.5 MHz lands inside the part's
-/// tolerance. The reset tail is left zero and is never rewritten.
-#[cfg(feature = "strip-check")]
-fn encode<'a>(frame: &[RGB8; STRIP_LENGTH], bits: &'a mut [u8]) -> &'a [u8] {
-    let used = STRIP_BIT_BYTES;
-    bits[..used].fill(0);
-
-    let mut bit = 0;
-    for pixel in frame {
-        for value in [pixel.g, pixel.r, pixel.b] {
-            for shift in (0..8).rev() {
-                set_bit(bits, bit);
-                if (value >> shift) & 1 == 1 {
-                    set_bit(bits, bit + 1);
-                }
-                bit += 3;
-            }
-        }
+    if let Err(error) = strip.write(data) {
+        error!("strip write failed: {error:?}");
     }
-
-    &bits[..used + STRIP_RESET_BYTES]
-}
-
-#[cfg(feature = "strip-check")]
-fn set_bit(bits: &mut [u8], index: usize) {
-    bits[index / 8] |= 0x80 >> (index % 8);
 }
 
 #[embassy_executor::task]
