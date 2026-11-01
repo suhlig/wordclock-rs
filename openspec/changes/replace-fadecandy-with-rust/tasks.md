@@ -44,7 +44,7 @@ Run this gate after tasks 2 and 3 and before any hardware provisioning. The core
 - [ ] 4.8 Decide the host against the D16 criteria and record the choice and evidence in `design.md`; if the spike is inconclusive, keep the Pi.
 - [ ] 4.9 If the ESP32-C3 is selected, split the workspace into `wordclock-core` (`no_std` + `alloc`), `wordclock-host` (simulator, CLI, Pi daemon), and `wordclock-esp32` (firmware); if the Pi is selected, keep the single crate and the `hardware` feature.
 - [ ] 4.10 Port the SPI-with-DMA strip transport from `spike/esp32c3-ota` into the firmware backend and delete the RMT path, as decided in D19. Verify a full 300-pixel frame transmits with Wi-Fi active and that no pixel shows a value belonging to another position.
-- [ ] 4.11 Decide the start-up behaviour when no network is reachable: keep the last synchronized time in NVS and render from it, or stay blank until SNTP answers. The wall installation has one 5 V cable and no Ethernet, so this is the only fallback. Verify a power cycle with the access point switched off shows the documented behaviour.
+- [ ] 4.11 Implement the start-up and outage behaviour decided in D20: stay dark until the first successful synchronization, never restore an unverified time, keep counting from the crystal-derived timer while the network is away, and blank once the last synchronization is older than the configured bound. Verify a power cycle with the access point switched off stays dark, and that a short outage keeps the correct minute.
 
 ## 5. Hardware spike and wiring verification (selected host)
 

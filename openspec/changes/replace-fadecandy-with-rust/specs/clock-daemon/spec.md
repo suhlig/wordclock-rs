@@ -22,7 +22,7 @@ The daemon SHALL recompute the frame when the local minute changes and SHALL kee
 - **THEN** the daemon continues to follow local wall-clock minutes without a gap longer than one refresh interval
 
 ### Requirement: Time-source startup gate
-After boot, the daemon or firmware SHALL NOT display a time until its time source reports synchronization; while waiting it SHALL show an all-off or neutral frame and SHALL report the wait.
+After boot, the daemon or firmware SHALL NOT display a time until its time source reports synchronization; while waiting it SHALL show an all-off or neutral frame and SHALL report the wait. It SHALL NOT restore a previously saved time from persistent storage to shorten that wait, because a restored time is unverified and may be arbitrarily stale.
 
 #### Scenario: Pi boot without RTC
 - **WHEN** the Pi boots without a hardware clock and NTP has not yet synchronized
@@ -39,6 +39,21 @@ After boot, the daemon or firmware SHALL NOT display a time until its time sourc
 #### Scenario: ESP32-C3 SNTP synchronization completes
 - **WHEN** the SNTP client reports synchronization
 - **THEN** the firmware renders the current local time within one refresh interval
+
+#### Scenario: Boot with the access point absent
+- **WHEN** the clock is powered up and the network never becomes reachable
+- **THEN** the strip stays dark indefinitely rather than showing a time that was never synchronized
+
+### Requirement: Bounded drift after synchronization
+While the network is unavailable the clock MAY keep displaying, but it SHALL keep time from a crystal-derived source and SHALL blank the display once the age of the last successful synchronization exceeds a configured bound, so that a long outage cannot produce a wrong minute.
+
+#### Scenario: Short outage
+- **WHEN** synchronization is lost for less than the configured bound
+- **THEN** the clock keeps displaying and stays within the drift the crystal allows
+
+#### Scenario: Outage beyond the bound
+- **WHEN** the last successful synchronization is older than the configured bound
+- **THEN** the display goes dark instead of showing a time that may be wrong, and the condition is logged
 
 ### Requirement: Per-minute color resampling
 The daemon SHALL preserve the legacy cron behavior by resampling the uniform color once per minute, and SHALL NOT resample it on each periodic frame refresh.

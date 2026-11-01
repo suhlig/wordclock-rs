@@ -321,6 +321,17 @@ The strip is therefore driven over **SPI2 with DMA at 2.5 MHz, three SPI bits pe
 
 Consequence to carry into the backend: the display transport must not depend on CPU service at a bounded interval during a frame. A transport that needs refilling is a design smell for this product.
 
+### D20: Never show a time that was not synchronized
+
+Dark is acceptable; wrong is not. That is a household requirement, not a nicety, and it decides the start-up behaviour and the outage behaviour together.
+
+- **At boot** with no reachable network, the clock stays dark indefinitely. It does not restore a saved time, because a restored time is unverified: after a week unplugged it would be confidently wrong, which is the one outcome the requirement forbids.
+- **While running**, losing the network does not blank the clock. It keeps counting from its own time base, and resynchronizes when the network returns.
+- **The time base between syncs must be crystal-derived** (the systimer on the C3), not the RC `Rtc` peripheral. The RC oscillator drifts in the region of minutes per hour, which would make "keep displaying during an outage" a way to show a wrong time within hours. The crystal gives tens of ppm, seconds per day.
+- **Beyond a configured age** without a successful synchronization, the display blanks rather than risk a wrong minute. At 30 ppm, a day is a few seconds of drift, so a bound of about 24 h keeps the displayed minute correct with room to spare. The exact bound is configuration; 24 h is the default.
+
+Consequence for the Pi path as well: it must not fall back to a file-based fake hardware clock for the *display*, since that is the same unverified restore. It may use one for logging timestamps.
+
 ## Risks / Trade-offs
 
 | Risk | Mitigation |
