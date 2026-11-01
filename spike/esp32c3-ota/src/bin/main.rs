@@ -83,7 +83,7 @@ macro_rules! mk_static {
 /// and `GET /` reports it, which is how an update is verified without USB.
 /// It sits at 13: the strip check, the boot-order work, the walking check, the
 /// move from RMT to SPI with DMA, and the fixture-frame parity build.
-const REVISION: u32 = 13;
+const REVISION: u32 = 15;
 
 const OTA_PORT: u16 = 3232;
 const HEADER_MAX: usize = 1024;
@@ -118,17 +118,102 @@ const STRIP_LENGTH: usize = 335;
 
 /// Dwell time on each pixel of the walk, in milliseconds. With 335 pixels one
 /// sweep takes about 100 s.
-#[cfg(all(feature = "strip-check", not(feature = "frame-check")))]
+#[cfg(all(
+    feature = "strip-check",
+    not(feature = "frame-check"),
+    not(feature = "fill-check"),
+    not(feature = "dense-check")
+))]
 const WALK_STEP_MS: u64 = 300;
 
 /// The walk colour: dim enough for a dark room, bright enough to see. Every
 /// tenth pixel is green instead of white, so a failure can be counted to.
-#[cfg(all(feature = "strip-check", not(feature = "frame-check")))]
+#[cfg(all(
+    feature = "strip-check",
+    not(feature = "frame-check"),
+    not(feature = "fill-check"),
+    not(feature = "dense-check")
+))]
 const WALK_PIXEL: RGB8 = RGB8::new(16, 16, 16);
-#[cfg(all(feature = "strip-check", not(feature = "frame-check")))]
+#[cfg(all(
+    feature = "strip-check",
+    not(feature = "frame-check"),
+    not(feature = "fill-check"),
+    not(feature = "dense-check")
+))]
 const WALK_MARKER: RGB8 = RGB8::new(0, 16, 0);
-#[cfg(all(feature = "strip-check", not(feature = "frame-check")))]
+#[cfg(all(
+    feature = "strip-check",
+    not(feature = "frame-check"),
+    not(feature = "fill-check"),
+    not(feature = "dense-check")
+))]
 const WALK_MARKER_EVERY: usize = 10;
+
+// The dense walk keeps the same machinery and changes only the payload. The
+// fixture frame renders `ee0b01`, which is eight ones in the green channel and
+// almost nothing elsewhere; a dim white walk (`10`) and a fill at the low level
+// (`06`) are both nearly all-zero bits, so neither one exercises the shape that
+// the failing frame carries.
+//
+// One pixel at a time keeps the current at `335 mA` quiescent plus about
+// `250 * 20/255` = 20 mA of drive, which is comfortably inside 500 mA.
+#[cfg(all(
+    feature = "strip-check",
+    not(feature = "frame-check"),
+    not(feature = "fill-check"),
+    feature = "dense-check"
+))]
+const WALK_STEP_MS: u64 = 400;
+#[cfg(all(
+    feature = "strip-check",
+    not(feature = "frame-check"),
+    not(feature = "fill-check"),
+    feature = "dense-check"
+))]
+const WALK_PIXEL: RGB8 = RGB8::new(0xee, 0x0b, 0x01);
+/// Every tenth pixel is green at the same bit density, so the payload on the
+/// wire is unchanged and only the channel moves. Counting a failure needs the
+/// marker; judging whether a pixel is the right colour does not.
+#[cfg(all(
+    feature = "strip-check",
+    not(feature = "frame-check"),
+    not(feature = "fill-check"),
+    feature = "dense-check"
+))]
+const WALK_MARKER: RGB8 = RGB8::new(0x00, 0xee, 0x00);
+#[cfg(all(
+    feature = "strip-check",
+    not(feature = "frame-check"),
+    not(feature = "fill-check"),
+    feature = "dense-check"
+))]
+const WALK_MARKER_EVERY: usize = 10;
+
+/// One channel at a time, so a pixel showing any other colour proves that the
+/// bytes on the wire are not the bytes we encoded. White is omitted: all three
+/// channels at once triples the current for no extra information.
+///
+/// The level keeps the strip inside 500 mA on the bench supply. The project's
+/// model is `pixels * 1 mA` quiescent plus `counts * 20/255 mA` of drive, so
+/// 335 pixels at this level draw `335 + 335 * 6 * 20/255` = about 493 mA.
+/// Raise it to 24 once a stronger supply feeds the strip: that is about 965 mA
+/// and is bright enough to judge colour across a lit room.
+#[cfg(feature = "fill-check")]
+const FILL_LEVEL: u8 = 6;
+
+#[cfg(feature = "fill-check")]
+const FILL_COLOURS: [RGB8; 4] = [
+    RGB8::new(FILL_LEVEL, 0, 0),
+    RGB8::new(0, FILL_LEVEL, 0),
+    RGB8::new(0, 0, FILL_LEVEL),
+    RGB8::new(0, 0, 0),
+];
+
+/// Reframes per fill colour, one per second: long enough to walk the whole
+/// chain, and a strip that reset itself recovers without a power cycle.
+#[cfg(feature = "fill-check")]
+const FILL_REFRAMES: u32 = 5;
 
 /// WS2812 through SPI: three SPI bits per LED bit at 2.5 MHz, so a `0` bit is
 /// 100 (0.4 us high, 0.8 us low) and a `1` bit is 110 (0.8 us high, 0.4 us
@@ -1101,16 +1186,42 @@ async fn strip_check(
     frame: &'static mut [RGB8; STRIP_LENGTH],
     bits: &'static mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
 ) {
-    #[cfg(feature = "frame-check")]
+    #[cfg(feature = "fill-check")]
+    hold_fill(strip, frame, bits).await;
+
+    #[cfg(all(feature = "frame-check", not(feature = "fill-check")))]
     hold_fixture(strip, frame, bits).await;
 
-    #[cfg(not(feature = "frame-check"))]
+    #[cfg(not(any(feature = "frame-check", feature = "fill-check")))]
     walk(strip, frame, bits).await;
+}
+
+/// Fills every pixel with the same colour and cycles through the primaries.
+///
+/// The frame the clock renders is already uniform, so identical bytes to every
+/// pixel are the sharpest transport test available: whatever the chain shows
+/// here was not chosen by the colour code.
+#[cfg(feature = "fill-check")]
+async fn hold_fill(
+    strip: &'static mut Strip,
+    frame: &'static mut [RGB8; STRIP_LENGTH],
+    bits: &'static mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
+) -> ! {
+    loop {
+        for colour in FILL_COLOURS {
+            frame.fill(colour);
+
+            for _ in 0..FILL_REFRAMES {
+                write_frame(strip, frame, bits);
+                Timer::after(Duration::from_secs(1)).await;
+            }
+        }
+    }
 }
 
 /// Shows the fixture frame and rewrites it every second, so a strip reset
 /// recovers without a power cycle.
-#[cfg(feature = "frame-check")]
+#[cfg(all(feature = "frame-check", not(feature = "fill-check")))]
 async fn hold_fixture(
     strip: &'static mut Strip,
     frame: &'static mut [RGB8; STRIP_LENGTH],
@@ -1129,7 +1240,7 @@ async fn hold_fixture(
 }
 
 /// Walks one dim pixel through the whole chain.
-#[cfg(not(feature = "frame-check"))]
+#[cfg(not(any(feature = "frame-check", feature = "fill-check")))]
 async fn walk(
     strip: &'static mut Strip,
     frame: &'static mut [RGB8; STRIP_LENGTH],
