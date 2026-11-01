@@ -63,11 +63,23 @@ static_cell      = "2.1.1"
 esp-hal-smartled = { version = "0.18.0", features = ["esp32c3"] }
 smart-leds       = "0.4.0"
 
+# The core modules used by the host, compiled without std for the C3.
+chrono   = { version = "0.4", default-features = false, features = ["alloc"] }
+computus = "2"
+fastrand = { version = "2", default-features = false, features = ["alloc"] }
+libm     = "0.2"
+
 # For fine tuning these settings, please refer to https://doc.rust-lang.org/cargo/reference/profiles.html
 [features]
+# Present so the `#[cfg(feature = "std")]` gates in the shared core modules are
+# well formed. It stays off: the firmware seeds its own RNG.
+std = []
 # Drive the offcut strip on GPIO3 through the level shifter with a short
 # pattern, for wiring and power checks. The OTA server stays available.
 strip-check = []
+# Render the 06:30 fixture frame with the real core and serve it at `GET /frame`
+# so it can be diffed against `examples/dump_frame.rs`. Implies strip-check.
+frame-check = ["strip-check"]
 
 [profile.dev]
 # The default debug profile is too slow and too big for resource-constrained devices.

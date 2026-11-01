@@ -54,6 +54,15 @@ use log::{error, info};
 use smart_leds::{RGB8, SmartLedsWrite};
 use static_cell::StaticCell;
 
+#[cfg(feature = "frame-check")]
+use esp32c3_ota::LOGICAL_PIXELS;
+#[cfg(feature = "frame-check")]
+use esp32c3_ota::clock;
+#[cfg(feature = "frame-check")]
+use esp32c3_ota::color::{ColorPicker, DEFAULT_BIRTHDAYS, GammaLut};
+#[cfg(feature = "frame-check")]
+use esp32c3_ota::frame::Frame;
+
 use Outcome::{KeepRunning, Restart};
 
 extern crate alloc;
@@ -72,9 +81,9 @@ macro_rules! mk_static {
 
 /// Bump this before every OTA experiment. The on-board LED blinks it at boot
 /// and `GET /` reports it, which is how an update is verified without USB.
-/// It sits at 12: the strip check, the boot-order work, the walking check for
-/// the extended strip, and the move from RMT to SPI with DMA.
-const REVISION: u32 = 12;
+/// It sits at 13: the strip check, the boot-order work, the walking check, the
+/// move from RMT to SPI with DMA, and the fixture-frame parity build.
+const REVISION: u32 = 13;
 
 const OTA_PORT: u16 = 3232;
 const HEADER_MAX: usize = 1024;
@@ -109,16 +118,16 @@ const STRIP_LENGTH: usize = 335;
 
 /// Dwell time on each pixel of the walk, in milliseconds. With 335 pixels one
 /// sweep takes about 100 s.
-#[cfg(feature = "strip-check")]
+#[cfg(all(feature = "strip-check", not(feature = "frame-check")))]
 const WALK_STEP_MS: u64 = 300;
 
 /// The walk colour: dim enough for a dark room, bright enough to see. Every
 /// tenth pixel is green instead of white, so a failure can be counted to.
-#[cfg(feature = "strip-check")]
+#[cfg(all(feature = "strip-check", not(feature = "frame-check")))]
 const WALK_PIXEL: RGB8 = RGB8::new(16, 16, 16);
-#[cfg(feature = "strip-check")]
+#[cfg(all(feature = "strip-check", not(feature = "frame-check")))]
 const WALK_MARKER: RGB8 = RGB8::new(0, 16, 0);
-#[cfg(feature = "strip-check")]
+#[cfg(all(feature = "strip-check", not(feature = "frame-check")))]
 const WALK_MARKER_EVERY: usize = 10;
 
 /// WS2812 through SPI: three SPI bits per LED bit at 2.5 MHz, so a `0` bit is
@@ -167,6 +176,69 @@ static HEADER: StaticCell<Aligned<HEADER_MAX>> = StaticCell::new();
 static SOCKET_RX: StaticCell<Aligned<SOCKET_BUFFER>> = StaticCell::new();
 static SOCKET_TX: StaticCell<Aligned<SOCKET_BUFFER>> = StaticCell::new();
 
+/// Fixture used by the frame-check build, matching `examples/dump_frame.rs`
+/// and the frame the gate measured.
+#[cfg(feature = "frame-check")]
+const FIXTURE_SEED: u64 = 42;
+#[cfg(feature = "frame-check")]
+const FIXTURE_YEAR: i32 = 2026;
+#[cfg(feature = "frame-check")]
+const FIXTURE_MONTH: u32 = 7;
+#[cfg(feature = "frame-check")]
+const FIXTURE_DAY: u32 = 15;
+#[cfg(feature = "frame-check")]
+const FIXTURE_HOUR: u32 = 6;
+#[cfg(feature = "frame-check")]
+const FIXTURE_MINUTE: u32 = 30;
+
+/// Renders the fixture frame with the real core and returns both the corrected
+/// pixels for the strip and the dump text the host prints.
+#[cfg(feature = "frame-check")]
+#[allow(
+    clippy::large_stack_frames,
+    reason = "the gamma LUT is a bounded table and lives in the future or on the \
+    server path, not in a hot loop"
+)]
+fn render_fixture() -> Result<(alloc::vec::Vec<RGB8>, String), &'static str> {
+    let date = chrono::NaiveDate::from_ymd_opt(FIXTURE_YEAR, FIXTURE_MONTH, FIXTURE_DAY)
+        .ok_or("invalid fixture date")?;
+
+    let mut picker = ColorPicker::from_rng(
+        fastrand::Rng::with_seed(FIXTURE_SEED),
+        DEFAULT_BIRTHDAYS.to_vec(),
+    );
+    picker.begin_minute();
+
+    let mut frame = Frame::blank(LOGICAL_PIXELS);
+    for index in clock::pixels(FIXTURE_HOUR, FIXTURE_MINUTE) {
+        frame.set(index, picker.choose(date, FIXTURE_HOUR, FIXTURE_MINUTE).rgb);
+    }
+
+    let corrected = frame.corrected_logical(&GammaLut::new([1.0, 1.0, 1.0]));
+
+    let mut text = String::new();
+    let _ = writeln!(
+        text,
+        "FRAME time={}-{:02}-{:02}T{:02}:{:02} color=none seed={FIXTURE_SEED}",
+        FIXTURE_YEAR, FIXTURE_MONTH, FIXTURE_DAY, FIXTURE_HOUR, FIXTURE_MINUTE
+    );
+    for (index, (&raw, &shown)) in frame.logical().iter().zip(corrected.iter()).enumerate() {
+        let _ = writeln!(
+            text,
+            "{index} {:02x}{:02x}{:02x} {:02x}{:02x}{:02x}",
+            raw.r, raw.g, raw.b, shown.r, shown.g, shown.b
+        );
+    }
+    let _ = writeln!(text, "END");
+
+    let pixels = corrected
+        .iter()
+        .map(|color| RGB8::new(color.r, color.g, color.b))
+        .collect();
+
+    Ok((pixels, text))
+}
+
 fn set_led(led: &mut Leds<'_>, color: RGB8) {
     led.write([color]).expect("RMT write failed");
 }
@@ -180,6 +252,8 @@ struct Request {
     is_get: bool,
     is_put: bool,
     targets_ota: bool,
+    #[cfg_attr(not(feature = "frame-check"), allow(dead_code))]
+    targets_frame: bool,
     content_length: Option<usize>,
     expect_continue: bool,
 }
@@ -196,6 +270,7 @@ fn parse_request(header: &str) -> Result<Request, &'static str> {
         is_get: method.eq_ignore_ascii_case("GET"),
         is_put: method.eq_ignore_ascii_case("PUT") || method.eq_ignore_ascii_case("POST"),
         targets_ota: target == "/ota",
+        targets_frame: target == "/frame",
         content_length: None,
         expect_continue: false,
     };
@@ -415,6 +490,7 @@ fn status_document(
     );
     let _ = writeln!(document, "strip_check={}", strip_state());
     let _ = writeln!(document, "strip_pixels={}", strip_pixels());
+    let _ = writeln!(document, "frame_check={}", cfg!(feature = "frame-check"));
 
     match running_slot(flash, partition_buffer) {
         Ok(slot) => {
@@ -661,9 +737,18 @@ async fn handle(
     let (header, leftover) = read_headers(socket, header_buffer).await?;
     let request = parse_request(header)?;
 
-    if request.is_get && !request.targets_ota {
+    if request.is_get && !request.targets_ota && !request.targets_frame {
         let body = status_document(flash, partition_buffer);
         respond(socket, "200 OK", &body).await?;
+        return Ok(KeepRunning);
+    }
+
+    #[cfg(feature = "frame-check")]
+    if request.is_get && request.targets_frame {
+        match render_fixture() {
+            Ok((_, text)) => respond(socket, "200 OK", &text).await?,
+            Err(reason) => respond(socket, "500 Internal Server Error", reason).await?,
+        }
         return Ok(KeepRunning);
     }
 
@@ -1016,8 +1101,40 @@ async fn strip_check(
     frame: &'static mut [RGB8; STRIP_LENGTH],
     bits: &'static mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
 ) {
-    // One reusable frame, so the walk costs a single DMA transfer per step and
-    // every frame covers the whole chain.
+    #[cfg(feature = "frame-check")]
+    hold_fixture(strip, frame, bits).await;
+
+    #[cfg(not(feature = "frame-check"))]
+    walk(strip, frame, bits).await;
+}
+
+/// Shows the fixture frame and rewrites it every second, so a strip reset
+/// recovers without a power cycle.
+#[cfg(feature = "frame-check")]
+async fn hold_fixture(
+    strip: &'static mut Strip,
+    frame: &'static mut [RGB8; STRIP_LENGTH],
+    bits: &'static mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
+) -> ! {
+    let (pixels, _) = render_fixture().expect("the fixture frame must render");
+
+    for (slot, pixel) in frame.iter_mut().zip(pixels.iter()) {
+        *slot = *pixel;
+    }
+
+    loop {
+        write_frame(strip, frame, bits);
+        Timer::after(Duration::from_secs(1)).await;
+    }
+}
+
+/// Walks one dim pixel through the whole chain.
+#[cfg(not(feature = "frame-check"))]
+async fn walk(
+    strip: &'static mut Strip,
+    frame: &'static mut [RGB8; STRIP_LENGTH],
+    bits: &'static mut [u8; STRIP_BIT_BYTES + STRIP_RESET_BYTES],
+) -> ! {
     loop {
         for index in 0..STRIP_LENGTH {
             frame[index] = if index.is_multiple_of(WALK_MARKER_EVERY) {
