@@ -262,7 +262,7 @@ The ESP32-C3 has no equivalent orderly stop. On power loss it cannot render a fi
 
 The host is chosen after the core and simulator exist, not before. Two candidates are carried through the plan: the incumbent Raspberry Pi 3B and the ESP32-C3-DevKit-RUST-1 that is already available. The gate runs after tasks 2 and 3 and before any hardware provisioning. The spike is time-boxed and answers the questions that paper cannot:
 
-- Does RMT drive the real 288-pixel strip reliably through the 74AHCT125, with no visible gaps between RMT chunks?
+- Does RMT drive the real 288-pixel strip reliably through the 74AHCT125, with no visible gaps between RMT chunks? **Answered no on 2026-11-01, once the chain reached 335 pixels with Wi-Fi running; the transport was replaced with SPI and DMA, see D19.**
 - What is the boot-to-first-frame time, and how long is a full frame?
 - Does Wi-Fi associate, synchronize via SNTP, and recover from a network loss without showing a stale or reset time?
 - Does the `Europe/Berlin` DST rule match `chrono-tz` on the host across the fixture and future transition dates?
@@ -275,9 +275,9 @@ The comparison is recorded in this design and in `tasks.md`. The working audit, 
 | :--- | :--- | :--- |
 | CPU / RAM | 4× Cortex-A53, 1 GiB | single RISC-V, 400 KiB SRAM |
 | Storage | SD card | typically 4 MiB flash, no SD |
-| Network | Ethernet and 2.4 GHz Wi-Fi | 2.4 GHz Wi-Fi only |
+| Network | Wi-Fi only here: the wall has one cable and it carries 5 V, no Ethernet drop | 2.4 GHz Wi-Fi only |
 | Time source | ntpsec/systemd-timesyncd | SNTP over Wi-Fi |
-| LED transport | SPI0, 2.4–3 MHz | RMT, 800 kHz NZR |
+| LED transport | SPI0, 2.4–3 MHz | SPI2 with DMA, 2.5 MHz (D19) |
 | Runtime | Linux + systemd | bare-metal `esp-hal` or `esp-idf-svc` |
 | Deployment | Ansible + systemd | USB flash or OTA |
 | Updates | apt + Ansible | OTA with rollback partition |
@@ -297,11 +297,11 @@ Measured on 2026-10-25 with the combined gate firmware (real core plus the `Euro
 | RAM | 54,432-byte heap peak of 103,184, plus a 27,656-byte static RMT buffer |
 | Wi-Fi reconnect | 5.1 s including the 5 s backoff; association itself about 0.1 s |
 
-The RMT timing question is closed: the Pico analyzer captured two frames with no low interval above 0.708 µs, and `rgb_led_ws281x` decoded all 288 pixels identically to the host simulator. Task 4.3 still needs the level shifter and the real strip to prove the 5 V levels and edge quality, but not the gap. The Pi 3B remains the default if the 5 V strip test fails.
+The RMT timing question was closed on 2026-10-25 and has since been reopened and settled the other way. That capture ran with `frame-loop`, which skips Wi-Fi, and the strip it drove was 288 pixels; at 335 pixels with Wi-Fi running, RMT produced a few corrupted frames per sweep (D19). The transport is now SPI with DMA, which measured clean. What remains outstanding for the host gate is the full 300-pixel frame on the real chain, the Fadecandy colour comparison, and a decision on start-up behaviour without a network (task 4.11). Note also that the wall installation has a single 5 V cable and no Ethernet drop, so the Pi's wired-network advantage does not exist here.
 
 ### D17: ESP32-C3 output and time
 
-If the ESP32-C3 is selected, the output uses one RMT TX channel at 800 kHz NZR with the WS2812 GRB order, sending all 288 logical pixels plus black padding. Choose a free, non-strapping header GPIO after checking the board schematic; avoid the USB and boot-strapping pins. The data line still goes through the 74AHCT125 (or 74HCT245), the 470 Ω series resistor, and a common ground; the C3 is 3.3 V and the strip expects a 5 V-referenced data high. The RMT driver may emit the frame in chunks; verify with the Pico analyzer that the inter-chunk gap stays well below the WS2812 reset threshold, otherwise the strip will latch mid-frame.
+If the ESP32-C3 is selected, the output transport is SPI2 with DMA as decided in D19, with GPIO3 routed as MOSI. The data line still goes through the 74AHCT125 (or 74HCT245), the 470 Ω series resistor, and a common ground; the C3 is 3.3 V and the strip expects a 5 V-referenced data high. The firmware writes complete frames and must not depend on CPU service at any point during a transmission.
 
 Time comes from Wi-Fi association and SNTP. The firmware gates the first frame on a successful synchronization, retries indefinitely if the network is unavailable, re-synchronizes periodically, and keeps the hardware watchdog fed. Only `Europe/Berlin` is required for v1; use a fixed offset plus the EU DST rule, or a filtered timezone database, and keep the full `chrono-tz` database out of the firmware unless the flash budget proves otherwise. Configuration (strip length, GPIO, timezone, birthdays, refresh interval, gate) lives in NVS/LittleFS or is compiled into the image; there is no TOML file and no systemd. Logging goes to USB serial/defmt during development and to a network log or OTA-readable buffer in production.
 
@@ -310,6 +310,16 @@ There is no orderly shutdown. Power loss leaves the last frame latched, and the 
 ### D18: ESP32-C3 lifecycle and deployment
 
 The spike also decides between `esp-hal` (bare-metal, `no_std`, smaller and deterministic) and `esp-idf-svc` (std, FreeRTOS, easier SNTP/OTA/logging but a larger binary and more C dependencies). Whichever wins, the firmware needs a hardware watchdog, a Wi-Fi reconnect state machine, periodic SNTP resync, a visible version string, and OTA with an A/B partition and rollback. Wi-Fi credentials are provisioned into NVS and are never committed to the repository. Deployment is a documented `espflash` command or an OTA upload with a checksum; there is no Ansible, no non-root service user, and no single-writer lock because the device runs one firmware image. Rollback is the previous OTA image or a USB reflash, with the legacy Pi/Fadecandy clock as the ultimate fallback.
+
+### D19: Drive the ESP32-C3 strip over SPI with DMA, not RMT
+
+The C3 gives an RMT channel 48 codes of memory, and a full clock frame is more than 7,000 codes. The driver must therefore refill that buffer from the CPU every ~30 µs. In `esp-hal`'s blocking mode the refill runs in a busy-poll loop, so an interrupt that outlasts the deadline makes the hardware wrap the block and send it again: everything after that point in the frame shifts by two pixels per wrap.
+
+Measured on 2026-11-01 on a 335-pixel chain with Wi-Fi active: a single lit pixel appeared about 36 pixels further down the chain, a few times per 100 s sweep. That is 18 wraps, roughly 1.1 ms of interrupt time. Writing each frame twice turned the stray pixel into a brief flicker without removing the cause. The earlier clean RMT capture was made with `frame-loop`, which skips Wi-Fi, so the real clock never runs in the only state where RMT was proven.
+
+The strip is therefore driven over **SPI2 with DMA at 2.5 MHz, three SPI bits per LED bit**: `0` is `100` and `1` is `110`, which is exact at 80 MHz / 32 and inside the WS2812B tolerance. GPIO3 is routed as MOSI, the clock pin is unused, and DMA streams a 3 KiB bitstream out of memory while the CPU services the radio. A full 335-pixel walk then runs with no glitches at all. The Pi path uses SPI0 in the same shape, so the two hosts now share one transport design and the backend is portable between them.
+
+Consequence to carry into the backend: the display transport must not depend on CPU service at a bounded interval during a frame. A transport that needs refilling is a design smell for this product.
 
 ## Risks / Trade-offs
 

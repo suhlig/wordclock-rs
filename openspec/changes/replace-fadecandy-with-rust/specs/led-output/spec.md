@@ -7,15 +7,22 @@ Delivers a complete color frame to the physical WS2812/WS2812B strip over the se
 ## ADDED Requirements
 
 ### Requirement: Host output transport
-The system SHALL drive the strip through the selected host's supported transport: SPI0 on the Raspberry Pi and one RMT TX channel on the ESP32-C3. Both transports SHALL emit the same WS2812/WS2812B waveform, pixel order, and green-red-blue color order.
+The system SHALL drive the strip through the selected host's supported transport: SPI0 on the Raspberry Pi and SPI with DMA on the ESP32-C3. Both transports SHALL emit the same WS2812/WS2812B waveform, pixel order, and green-red-blue color order.
 
 #### Scenario: Pi SPI output
 - **WHEN** a frame is written on the Pi
 - **THEN** it is transmitted over SPI0 to `/dev/spidev0.0` with the configured clock
 
-#### Scenario: ESP32-C3 RMT output
+#### Scenario: ESP32-C3 SPI output
 - **WHEN** a frame is written on the ESP32-C3
-- **THEN** it is transmitted over the selected RMT channel at the WS2812 bit timing
+- **THEN** it is transmitted over SPI2 with DMA and GPIO3 as MOSI, at the encoded WS2812 bit timing
+
+### Requirement: Transport independent of CPU scheduling
+On the ESP32-C3 the frame SHALL be transmitted without the CPU having to service the transport at a bounded interval, so that radio interrupts cannot corrupt the bitstream.
+
+#### Scenario: Frame under radio load
+- **WHEN** a complete frame is transmitted while Wi-Fi traffic and radio interrupts are active
+- **THEN** every pixel receives its own value, and no pixel shows a value that belongs to another position in the frame
 
 ### Requirement: Complete frame with padding
 The system SHALL write all 288 logical word pixels and, when the physical strip is longer, SHALL write the remaining pixels as black.
@@ -60,8 +67,8 @@ If the LED output device is unavailable or a write fails, the system SHALL repor
 - **WHEN** the daemon starts without the configured SPI device
 - **THEN** it reports a clear error, remains running, and retries until the device becomes available
 
-#### Scenario: RMT output unavailable on the ESP32-C3
-- **WHEN** the RMT channel cannot be initialized or a transfer fails
+#### Scenario: SPI output unavailable on the ESP32-C3
+- **WHEN** the SPI or DMA channel cannot be initialized or a transfer fails
 - **THEN** the firmware reports a clear error and retries or restarts the output task without silently stopping
 
 ### Requirement: Hardware diagnostic pattern
