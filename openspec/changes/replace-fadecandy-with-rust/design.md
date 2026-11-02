@@ -20,6 +20,8 @@ Fadecandy is dead upstream and cannot be patched. The Ruby LED ecosystem is thin
 
 The host is a second, separate question. The current Pi 3B is the incumbent and has ample headroom, but the workload is 288 pixels updated once per minute, which also fits a single ESP32-C3. An ESP32-C3-DevKit-RUST-1 and a Pi Zero 2 W are already available, so the choice can be made on measurements instead of assumptions. The core, simulator, and fixture are therefore kept host-independent, and exactly one host is selected before hardware provisioning.
 
+The network is a private LAN with no inbound exposure: a local MQTT broker federates with anything outside the house over Tailscale, and the device terminates no TLS. See D21, which settles the posture before the spike runs and removes the constraint most likely to have disqualified the C3.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -299,6 +301,8 @@ Measured on 2026-10-25 with the combined gate firmware (real core plus the `Euro
 
 The RMT timing question was closed on 2026-10-25 and has since been reopened and settled the other way. That capture ran with `frame-loop`, which skips Wi-Fi, and the strip it drove was 288 pixels; at 335 pixels with Wi-Fi running, RMT produced a few corrupted frames per sweep (D19). The transport is now SPI with DMA, which measured clean. What remains outstanding for the host gate is the full 300-pixel frame on the real chain, the Fadecandy colour comparison, and a decision on start-up behaviour without a network (task 4.11). Note also that the wall installation has a single 5 V cable and no Ethernet drop, so the Pi's wired-network advantage does not exist here.
 
+One criterion came off the list before the spike finished. A TLS stack and a certificate store were the constraints most likely to disqualify the C3, and D21 records that the control plane is plain MQTT on the LAN behind a Tailscale VPN, so neither has to fit. What remains a real constraint is RAM for concurrent connections and the discipline of never blocking, not the protocol.
+
 ### D17: ESP32-C3 output and time
 
 If the ESP32-C3 is selected, the output transport is SPI2 with DMA as decided in D19, with GPIO3 routed as MOSI. The data line still goes through the 74AHCT125 (or 74HCT245), the 470 Ω series resistor, and a common ground; the C3 is 3.3 V and the strip expects a 5 V-referenced data high. The firmware writes complete frames and must not depend on CPU service at any point during a transmission.
@@ -334,6 +338,34 @@ Dark is acceptable; wrong is not. That is a household requirement, not a nicety,
 
 Consequence for the Pi path as well: it must not fall back to a file-based fake hardware clock for the *display*, since that is the same unverified restore. It may use one for logging timestamps.
 
+### D21: Plain MQTT on the LAN, and no TLS in the firmware
+
+The clock's control plane is plain MQTT to a broker on the local network. That broker federates with the outside world over Tailscale, so nothing the clock talks to is internet-facing and the device itself terminates no TLS. The same reasoning covers the planned status page: served on the LAN, in plaintext, to clients that are already on the network.
+
+This is the single largest constraint removed from the host decision, which is why it is recorded here rather than with the features that will use it. A mbedtls-class handshake needs tens of KiB of heap per connection against roughly 50 KiB of headroom on the C3, and a CA or client certificate would have had nowhere to live: the partition table leaves 128 KiB unallocated, which is room for a small asset filesystem, not a certificate store with rotation. Without TLS the C3's budget is comfortable for a broker connection plus a small HTTP server, provided nothing blocks.
+
+What the decision commits to, so the consequences are explicit rather than accidental:
+
+- Broker credentials, if any, are plaintext MQTT credentials in NVS. That is acceptable only because the segment is not exposed, and the deployment documentation must say so rather than implying transport security.
+- Home Assistant integration is **MQTT discovery, not the ESPHome native API**. HA's built-in MQTT integration materialises entities from retained `homeassistant/<component>/<node>/<object>/config` messages, so there is no custom component, no protobuf server and no TLS. What that gives up is ESPHome's dashboard tile, its API log stream and update-from-HA; OTA stays on the HTTP endpoint. Reimplementing the native API to recover those is not worth it.
+- Subscribe narrowly: the device's own command topics plus `homeassistant/status`, so discovery is re-announced after an HA restart. Never `homeassistant/#`, which would deliver every other device's retained discovery payloads into a mailbox sized for one. Command topics are never retained, because a retained command replays on every reconnect.
+- Remote access is Tailscale's job. No port forwarding, no broker exposure, and no inbound path to the device.
+- The threat model is "trusted LAN". A compromised host on that segment can command the clock, and that is accepted.
+- If the broker ever moves off the LAN, this decision is void. The options then are a TLS-capable element in front of the clock, for which the Pi is the obvious candidate, or a host change — not adding TLS to a single-core C3 with 50 KiB of heap.
+- Two other limits stay in force and are easy to forget: only GPIO0 and GPIO1 remain free once GPIO3 carries the strip, and ADC1 is GPIO0–GPIO4 with ADC2 unavailable while Wi-Fi runs, so the current-sense channel and any physical input compete for those same two pins.
+
+MQTT, the web UI, and any command surface are separate OpenSpec changes after the cutover. This decision fixes the network posture they inherit, not their scope. What those consumers read is fixed by D22.
+
+### D22: Publish the shown state, not the frame
+
+The clock publishes what it is showing, so that other displays and Home Assistant can follow it: the local time it represents plus the UTC instant, the rendered phrase, the colour with its XKCD name, the mode or occasion, and whether the display is dark. One JSON document per minute change, retained, on the same topic HA uses as its `state_topic` — HA reads the keys it knows (`state`, `color`, `brightness`) and ignores the rest, while a mirror reads the whole document. One publisher, two kinds of consumer.
+
+Not the frame. A frame is a function of the renderer, the pixel mapping and the strip length; publishing 288 pixels would couple every consumer to all three, cost a couple of kilobytes per message, and reveal the physical layout in exchange for information that is derivable from the semantic state. If a consumer ever genuinely needs pixels, that is a separate opt-in publisher with its own cost.
+
+Retained rather than a stream, so a consumer that joins late — or HA after a restart — gets the current state on subscribe instead of waiting up to a minute. The message carries the minute it represents, so a consumer whose own clock is slightly off can align to the same minute rather than the neighbouring one.
+
+The invariant that matters: **rendering never depends on the broker.** Publishing is fire-and-forget; an absent or slow broker must not delay a frame, change a colour or blank the display. If the broker is unreachable the clock keeps clocking and HA shows the entity unavailable. That is the same rule as D21's no-blocking requirement, seen from the other side.
+
 ## Risks / Trade-offs
 
 | Risk | Mitigation |
@@ -344,6 +376,8 @@ Consequence for the Pi path as well: it must not fall back to a file-based fake 
 | RMT chunk gaps reset the strip mid-frame | Measure the gap with the Pico analyzer, use a streaming/chunked RMT driver, and keep the largest gap far below the WS2812 reset threshold; if it cannot be met, reject the C3 path. |
 | ESP32-C3 Wi-Fi is weak or unavailable at the clock | Use 2.4 GHz coverage at the final location, test association and SNTP after a network loss, and keep the Pi/Ethernet path as the fallback if the site is marginal. |
 | ESP32-C3 flash is too small for the timezone data and OTA slots | Restrict timezone data to `Europe/Berlin`, measure the release image, and reject the C3 path if the OTA partition cannot hold it with headroom. |
+| TLS or a certificate store does not fit the C3 | Not required: the control plane is plain MQTT on the LAN and remote access is Tailscale's job (D21). If the broker ever moves off the LAN, put a TLS-capable element in front of the clock or change host; do not add TLS to the firmware. |
+| The web UI or an MQTT client stalls the network stack | Keep every call in the network path non-blocking, including the display write, and size socket buffers against measured free heap rather than the 4 KiB+4 KiB default. |
 | ESP32-C3 cannot show a shutdown pattern on power loss | Document the limitation, keep the post-boot neutral/NTP gate, and do not claim a shutdown guarantee for the C3 path. |
 | OTA update fails and bricks the device | Use A/B partitions with rollback, verify the image checksum before activation, and keep USB reflash and the legacy Pi/Fadecandy clock as recovery paths. |
 | `esp-hal`/`esp-idf` API churn breaks the firmware | Pin the toolchain and crate versions, keep the core host-independent, and time-box the spike before committing to the C3 path. |
@@ -375,7 +409,7 @@ Consequence for the Pi path as well: it must not fall back to a file-based fake 
 
 ## Deferred Reminders backlog
 
-The Reminders list "Wordclock" held 56 items on 2026-10-24: 16 open and 40 completed. Nothing below is part of this change. The open ideas are recorded here so the architecture does not close doors, and each becomes its own OpenSpec proposal after the parity cutover.
+The Reminders list "Wordclock" held 56 items on 2026-10-24: 16 open and 40 completed. Nothing below is part of this change. The open ideas are recorded here so the architecture does not close doors, and each becomes its own OpenSpec proposal after the parity cutover. The observability and interaction ideas in particular inherit the network posture set by D21 and the state format set by D22: plain MQTT and plaintext HTTP on the LAN, no TLS in the firmware, remote access by VPN, and semantic state rather than pixel frames.
 
 **Open ideas**
 
