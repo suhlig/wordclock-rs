@@ -58,7 +58,13 @@ openspec instructions apply --change replace-fadecandy-with-rust
 ./scripts/build-openspec-ebook.sh
 ```
 
-Renders `dist/replace-fadecandy-with-rust.epub` and `.pdf` for reading on a tablet. The book opens with a cover built from `docs/images/wordclock-front.jpg`, followed by the OpenSpec proposal, design, tasks, and capability specs, then the project documentation: this README, the hardware guide, the ESP32-C3 spike, and the handoff. Mermaid diagrams are rendered with `mermaid-cli`, fetched through `npx` unless `mmdc` is already on `PATH`.
+Renders `dist/replace-fadecandy-with-rust.epub` and `.pdf` for reading on a tablet.
+
+The book opens with a cover built from `docs/images/wordclock-front.jpg`, then renders **every change under `openspec/changes/` that has a `proposal.md`**: the primary change first, with its proposal, design, tasks and capability specs under their plain headings, and each further change after it alphabetically with its headings prefixed by the change name so the table of contents cannot show two unrelated `Proposal` entries. A new change joins the book without editing the script; pass a change name to render only that one.
+
+After the changes come the project documentation as reference material: this README, the hardware guide, the ESP32-C3 host audit, the OTA spike runbook, the strip colour fault handover, and the project handoff.
+
+The output keeps the primary change's name even when the book carries more than one, so the paths above stay valid. Mermaid diagrams are rendered with `mermaid-cli`, fetched through `npx` unless `mmdc` is already on `PATH`.
 
 ## License
 

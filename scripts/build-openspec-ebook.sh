@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 #
-# Renders the OpenSpec change under openspec/changes/ into a single EPUB and a
+# Renders the OpenSpec changes under openspec/changes/ into a single EPUB and a
 # single PDF, so the whole proposal can be read in Apple Books on a tablet.
 #
 #   ./scripts/build-openspec-ebook.sh [change-name]
 #
+# With no argument it renders every change that has a proposal, the primary one
+# first and the rest alphabetically, so a new change joins the book without
+# editing this file. With an argument it renders only that change.
+#
 # The book opens with a cover page built from docs/images/wordclock-front.jpg,
 # then the OpenSpec artifacts, then the project documentation (README, hardware
-# guide, ESP32-C3 spike, handoff) as reference material.
+# guide, ESP32-C3 audit, OTA spike, strip colour fault, handoff) as reference
+# material.
 #
 # Mermaid diagrams are rendered with mermaid-cli, fetched through npx unless
 # `mmdc` is already on PATH.
@@ -20,13 +25,34 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 # Typst resolves a relative image path against the working directory, so build
 # from the repository root even when the script is called from elsewhere.
 cd "$root"
-change=${1:-replace-fadecandy-with-rust}
-change_dir="$root/openspec/changes/$change"
+primary=replace-fadecandy-with-rust
 out="$root/dist"
 title="Wordclock without Fadecandy"
 subtitle="Replacing Fadecandy with a Rust implementation"
 cover="$root/docs/images/wordclock-front.jpg"
 cover_rel="docs/images/wordclock-front.jpg"
+
+# Which changes to render. The primary one leads because the book is named after
+# it and it carries the capability specs the others build on.
+changes=()
+if [[ $# -gt 0 ]]; then
+  changes=("$1")
+else
+  if [[ -f $root/openspec/changes/$primary/proposal.md ]]; then
+    changes+=("$primary")
+  fi
+  for dir in "$root"/openspec/changes/*/; do
+    name=$(basename "${dir%/}")
+    [[ $name == "$primary" || $name == archive ]] && continue
+    [[ -f $dir/proposal.md ]] || continue
+    changes+=("$name")
+  done
+fi
+
+if [[ ${#changes[@]} -eq 0 ]]; then
+  echo "no OpenSpec change with a proposal.md under openspec/changes" >&2
+  exit 1
+fi
 
 if [[ ! -f $cover ]]; then
   echo "missing cover image: $cover" >&2
@@ -36,6 +62,12 @@ fi
 # Reading order for the capability specs, mirroring proposal.md. Any spec
 # directory not listed here is appended alphabetically at the end.
 preferred_specs=(clock-rendering color-pipeline led-output display-simulator clock-daemon deployment)
+
+# `add-power-budget-and-current-sensing` becomes
+# `Add Power Budget And Current Sensing`, for use as a chapter prefix.
+change_title() {
+  tr '-' ' ' <<<"$1" | awk '{ for (i = 1; i <= NF; i++) $i = toupper(substr($i, 1, 1)) substr($i, 2); print }'
+}
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -57,31 +89,60 @@ emit_chapter() {
 
 emit_chapter "Overview" "$root/README.md"
 
-for doc in proposal design tasks; do
-  emit_chapter "$(tr '[:lower:]' '[:upper:]' <<<"${doc:0:1}")${doc:1}" "$change_dir/$doc.md"
+# Append one change: proposal, design, tasks, then its capability specs.
+# `prefix` is empty for the first change, whose chapters keep their plain
+# headings, and names the change for the rest so the table of contents cannot
+# show two unrelated "Proposal" entries.
+emit_change() {
+  local change=$1 prefix=$2
+  local change_dir="$root/openspec/changes/$change"
+  local doc spec name
+  local -a specs=()
+
+  for doc in proposal design tasks; do
+    emit_chapter "${prefix}$(tr '[:lower:]' '[:upper:]' <<<"${doc:0:1}")${doc:1}" "$change_dir/$doc.md"
+  done
+
+  for spec in "${preferred_specs[@]}"; do
+    [[ -f "$change_dir/specs/$spec/spec.md" ]] && specs+=("$spec")
+  done
+  for spec in "$change_dir"/specs/*/spec.md; do
+    [[ -f $spec ]] || continue
+    name=$(basename "$(dirname "$spec")")
+    [[ " ${specs[*]-} " == *" $name "* ]] || specs+=("$name")
+  done
+
+  for spec in "${specs[@]}"; do
+    emit_chapter "${prefix}Spec: $spec" "$change_dir/specs/$spec/spec.md"
+  done
+}
+
+for index in "${!changes[@]}"; do
+  if [[ $index -eq 0 ]]; then
+    emit_change "${changes[$index]}" ""
+  else
+    emit_change "${changes[$index]}" "$(change_title "${changes[$index]}"): "
+  fi
 done
 
-declare -a specs=()
-for spec in "${preferred_specs[@]}"; do
-  [[ -f "$change_dir/specs/$spec/spec.md" ]] && specs+=("$spec")
-done
-for spec in "$change_dir"/specs/*/spec.md; do
-  [[ -f "$spec" ]] || continue
-  name=$(basename "$(dirname "$spec")")
-  [[ " ${specs[*]-} " == *" $name "* ]] || specs+=("$name")
-done
-
-for spec in "${specs[@]}"; do
-  emit_chapter "Spec: $spec" "$change_dir/specs/$spec/spec.md"
-done
-
-# Reference material that is not part of the OpenSpec change.
+# Reference material that is not part of an OpenSpec change.
 emit_chapter "Hardware Guide" "$root/docs/hardware.md"
 emit_chapter "ESP32-C3 Host Spike" "$root/docs/esp32-c3-spike.md"
+emit_chapter "OTA Spike" "$root/spike/esp32c3-ota/README.md"
+emit_chapter "Strip Colour Fault" "$root/docs/strip-colour-fault-handover.md"
 emit_chapter "Handoff" "$root/HANDOFF.md"
 
+if [[ ${#changes[@]} -eq 1 ]]; then
+  changes_label="OpenSpec change ${changes[0]}"
+else
+  joined=$(printf '%s, ' "${changes[@]}")
+  changes_label="OpenSpec changes: ${joined%, }"
+fi
+
 mkdir -p "$out"
-name=$(tr '[:upper:]' '[:lower:]' <<<"$change")
+# The book keeps the primary change's name even when it carries more than one,
+# so the documented dist/replace-fadecandy-with-rust.* paths stay valid.
+name=${changes[0]}
 
 # Mermaid diagrams are rendered to PNG so the book shows the flowchart
 # instead of its source. mermaid-cli drives a headless browser; reuse a
@@ -151,7 +212,7 @@ cat >"$cover_typst" <<EOF
     #v(0.4cm)
     #text(fill: rgb("#8fb3ff"), size: 12pt)[$subtitle]
     #v(0.35cm)
-    #text(fill: rgb("#9a9a9a"), size: 9.5pt)[OpenSpec change $change]
+    #text(fill: rgb("#9a9a9a"), size: 9.5pt)[$changes_label]
   ]
 ]
 #pagebreak()
