@@ -104,6 +104,10 @@ dense-check = ["strip-check"]
 # Hold a fixed run of known colours at the start of the chain, so the physical
 # pixel can be read back against the logical one. Implies strip-check.
 identity-check = ["strip-check"]
+# Drive a 35-pixel offcut from the synchronized clock, drop Wi-Fi on a timer and
+# blank once the time is too old, so the outage behaviour is observable on the
+# bench instead of on the household access point. Implies strip-check.
+outage-check = ["strip-check"]
 # Alternate the fixture frame's own colour with black down the whole chain, so
 # every pixel is followed by a dark one. The stray that the four-bit cell fixed
 # landed on the pixel after any pixel ending in a `1`; a uniform fill hides it

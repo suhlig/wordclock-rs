@@ -194,6 +194,50 @@ What the investigation settled, in the order the pieces matter:
 3. **Send the first frame two or three times.** The far end of the chain can still be finishing its own power-on reset when the first frame lands; a single early frame left the last pixel dark on three of ten power-ups. The clock redraws once a minute, so a missed first frame would stay wrong for a minute.
 4. **Keep the 10 kΩ pull-down on the shifter, pin 2 (1A).** An undriven CMOS input is undefined on its own terms. The one combination never measured is an early first frame *without* it, so it is kept on principle rather than because its absence was shown to break the early-frame case.
 
+## Outage check
+
+`--features outage-check` answers the question the household actually cares about: when the network goes away, does the clock keep the right time, and does it go dark rather than show a wrong time? Taking the access point away to find out would take every other device in the house with it, so the firmware does it to itself.
+
+The build drives a **35-pixel offcut**, not the full chain. It is the only build where `STRIP_LENGTH` is not 335, and `strip_pixels=35` in the status page is how you confirm the right image is on the board.
+
+The display is deliberately not the clock face. On 35 pixels the bar is the **second of the minute** and moves about once every 1.7 s, and the colour carries the state of the time base:
+
+| Colour | Meaning | Age of the last reply |
+| :--- | :--- | :--- |
+| green `(0,24,0)` | fresh, the network is confirming | under 90 s |
+| amber `(24,12,0)` | still counting, no longer confirmed | 90 s to 180 s |
+| dark | past the bound, so show nothing | over 180 s |
+
+D20 specifies a day for that bound. A bench test has to be able to reach it, so this build uses three minutes (`outage::BLANK_AFTER_SECS`).
+
+### What to watch
+
+Each cycle is two minutes up and five minutes down, so roughly seven and a half minutes end to end:
+
+| After boot | What you should see |
+| :--- | :--- |
+| 0 to 120 s | green bar, advancing |
+| link drops | still green, still advancing, until the age passes 90 s |
+| 30 to 90 s into the outage | turns amber |
+| 120 to 180 s into the outage | goes dark and stays dark |
+| after the window | reconnects, resyncs, green again |
+
+The spread in those last two rows is because the drop lands at an arbitrary point in the 60 s resync interval.
+
+Pass means all three of:
+
+1. **The bar keeps advancing while the link is down.** That is the whole D20 time base: the network supplies a starting point, the crystal counts from it. A bar that freezes means the time is tied to the network and the approach is wrong.
+2. **The order is green, amber, dark, green.** Amber before dark is the difference between "stale but still mine" and "too old to show".
+3. **After recovery `clock_unix` matches `date +%s` on the host**, and the counters agree with what you watched: `max_sync_age_s` near 300, `outages` equal to the number of cycles.
+
+Those two counters exist because the status page is unreachable during exactly the window you want to observe. They are the evidence that survives the outage.
+
+### Things that look like faults
+
+- **Booting with no Wi-Fi means permanently dark.** That is D20 behaving correctly, not a wiring failure.
+- **No OTA during the down window.** The server is reachable whenever the link is up; if an upload is refused, wait for the green bar.
+- **The counters use load and store, not fetch.** On this target `AtomicU32` is `portable_atomic::Atomic<u32>`, which does not provide `fetch_add` or `fetch_max`. Both counters have a single writer, so a read-modify-write is correct.
+
 ## LED status
 
 | Colour | Meaning |

@@ -91,10 +91,11 @@ macro_rules! mk_static {
 
 /// Bump this before every OTA experiment. The on-board LED blinks it at boot
 /// and `GET /` reports it, which is how an update is verified without USB.
-/// It sits at 24: 23 verified the four-bit strip cell at the production
-/// colour, and this one adds SNTP and the status fields that a site survey
-/// from a phone needs, without a USB cable at the wall.
-const REVISION: u32 = 24;
+/// It sits at 25: 24 added SNTP and the status fields that a site survey from a
+/// phone needs, and this one drives a 35-pixel offcut from the synchronized
+/// clock, drops the link on a timer and blanks past a three-minute bound, so the
+/// outage behaviour is testable without touching the household access point.
+const REVISION: u32 = 25;
 
 const OTA_PORT: u16 = 3232;
 const HEADER_MAX: usize = 1024;
@@ -124,7 +125,13 @@ type Leds<'a> =
 /// The chain is the 35-pixel offcut plus the 300 LEDs added to it, so 335.
 /// A frame must always cover the whole strip: a frame that stops early leaves
 /// the remaining pixels at whatever they latched when the rail came up.
-#[cfg(feature = "strip-check")]
+///
+/// The outage check is the one build that runs short. It has to show two things
+/// only — that the clock is alive and that it has gone stale — and 35 pixels is
+/// the offcut that is on the bench anyway.
+#[cfg(all(feature = "strip-check", feature = "outage-check"))]
+const STRIP_LENGTH: usize = 35;
+#[cfg(all(feature = "strip-check", not(feature = "outage-check")))]
 const STRIP_LENGTH: usize = 335;
 
 /// The walk, and the payload it carries.
@@ -142,7 +149,8 @@ const STRIP_LENGTH: usize = 335;
     not(feature = "frame-check"),
     not(feature = "fill-check"),
     not(feature = "identity-check"),
-    not(feature = "boundary-check")
+    not(feature = "boundary-check"),
+    not(feature = "outage-check")
 ))]
 mod walk_pattern {
     use super::Rgb;
@@ -387,6 +395,48 @@ static LAST_SYNC_AT: AtomicU32 = AtomicU32::new(0);
 
 /// The DHCP lease in host byte order, zero until the address arrives.
 static LOCAL_IP: AtomicU32 = AtomicU32::new(0);
+
+/// Settings for the outage check, in one gate so the feature predicates stay
+/// in one place instead of on every constant.
+#[cfg(feature = "outage-check")]
+mod outage {
+    use core::sync::atomic::AtomicU32;
+
+    use super::Rgb;
+
+    /// How long the link stays up before the check drops it. Two resync
+    /// intervals, so the age is near zero when it goes down and both thresholds
+    /// below are reached inside the down window rather than by luck.
+    pub const UP_SECS: u64 = 120;
+
+    /// How long the link is held down.
+    pub const DOWN_SECS: u64 = 300;
+
+    /// Age at which the bar turns amber: still being counted, no longer
+    /// confirmed by the network.
+    pub const STALE_AFTER_SECS: u64 = 90;
+
+    /// Age at which the strip goes dark. D20 specifies a day for the real clock;
+    /// a bench test has to be able to reach the bound, so this build uses three
+    /// minutes and reaches it inside the down window.
+    pub const BLANK_AFTER_SECS: u64 = 180;
+
+    /// Re-render period. The bar steps about every 1.7 s across 35 pixels, so a
+    /// quarter second is smooth without being wasteful.
+    pub const REFRESH_MS: u64 = 250;
+
+    /// The bar while the last reply is fresh, and while it is stale but inside
+    /// the bound. Dim: 35 pixels at these levels draw well under 100 mA.
+    pub const FRESH: Rgb = Rgb::new(0, 24, 0);
+    pub const STALE: Rgb = Rgb::new(24, 12, 0);
+
+    /// Largest age seen since boot. The live age is small again by the time the
+    /// link is back, so this is the evidence that survives the outage.
+    pub static MAX_SYNC_AGE: AtomicU32 = AtomicU32::new(0);
+
+    /// How many times the check has dropped the link.
+    pub static OUTAGES: AtomicU32 = AtomicU32::new(0);
+}
 
 /// Timestamp source for the SNTP request.
 ///
@@ -667,6 +717,21 @@ fn status_document(
         LAST_SYNC_UNIX.load(Ordering::Relaxed)
     );
 
+    #[cfg(feature = "outage-check")]
+    {
+        let clock = match clock_unix_now() {
+            Some(unix) => alloc::format!("{unix}"),
+            None => String::from("none"),
+        };
+        let _ = writeln!(
+            document,
+            "clock_unix={} max_sync_age_s={} outages={}",
+            clock,
+            outage::MAX_SYNC_AGE.load(Ordering::Relaxed),
+            outage::OUTAGES.load(Ordering::Relaxed)
+        );
+    }
+
     match running_slot(flash, partition_buffer) {
         Ok(slot) => {
             let _ = writeln!(document, "running={slot:?}");
@@ -718,14 +783,35 @@ fn ip_text() -> String {
     )
 }
 
-/// Seconds since the last accepted SNTP reply, or `none` if there never was one.
-fn sync_age() -> String {
+/// Seconds since the last accepted reply, or `None` before the first one.
+fn age_secs() -> Option<u64> {
     if !SYNCED.load(Ordering::Relaxed) {
-        return "none".into();
+        return None;
     }
 
-    let at = LAST_SYNC_AT.load(Ordering::Relaxed) as u64;
-    alloc::format!("{}", now_secs().saturating_sub(at))
+    let at = u64::from(LAST_SYNC_AT.load(Ordering::Relaxed));
+    Some(now_secs().saturating_sub(at))
+}
+
+/// Seconds since the last accepted SNTP reply, or `none` if there never was one.
+fn sync_age() -> String {
+    match age_secs() {
+        Some(age) => alloc::format!("{age}"),
+        None => "none".into(),
+    }
+}
+
+/// Unix seconds extrapolated from the last accepted reply.
+///
+/// This is the D20 time base: the network supplies a starting point and the
+/// crystal counts from it, so an outage changes how old the time is and never
+/// which minute it is.
+#[cfg(feature = "outage-check")]
+fn clock_unix_now() -> Option<u64> {
+    let age = age_secs()?;
+    let base = u64::from(LAST_SYNC_UNIX.load(Ordering::Relaxed));
+
+    Some(base + age)
 }
 
 fn describe<T: core::fmt::Debug>(value: Option<T>) -> String {
@@ -1288,13 +1374,102 @@ async fn connection(mut controller: WifiController<'static>) {
         match controller.connect_async().await {
             Ok(info) => {
                 info!("Wi-Fi connected: {info:?}");
-                let info = controller.wait_for_disconnect_async().await.ok();
-                info!("Wi-Fi disconnected: {info:?}");
+
+                // Drop the link on purpose, hold it down, then let the loop
+                // reconnect. This is the outage test the household access point
+                // does not have to suffer.
+                #[cfg(feature = "outage-check")]
+                {
+                    info!("outage check: up for {} s", outage::UP_SECS);
+                    Timer::after(Duration::from_secs(outage::UP_SECS)).await;
+
+                    // Only the connection task writes this, so a read-modify-
+                    // write needs no fetch: `portable-atomic` on this target does
+                    // not provide one for `Atomic<u32>`.
+                    outage::OUTAGES.store(
+                        outage::OUTAGES.load(Ordering::Relaxed) + 1,
+                        Ordering::Relaxed,
+                    );
+                    info!("outage check: dropping the link");
+                    if let Err(error) = controller.disconnect_async().await {
+                        error!("outage check: disconnect failed: {error:?}");
+                    }
+
+                    info!("outage check: down for {} s", outage::DOWN_SECS);
+                    Timer::after(Duration::from_secs(outage::DOWN_SECS)).await;
+                }
+
+                #[cfg(not(feature = "outage-check"))]
+                {
+                    let info = controller.wait_for_disconnect_async().await.ok();
+                    info!("Wi-Fi disconnected: {info:?}");
+                }
             }
             Err(error) => error!("Wi-Fi connection failed: {error:?}"),
         }
 
         Timer::after(Duration::from_secs(5)).await;
+    }
+}
+
+/// Drives the 35-pixel offcut from the synchronized clock.
+///
+/// The bar is the second of the minute, so it keeps moving whatever the network
+/// is doing. The colour is the state of the time base: green while the last
+/// reply is fresh, amber while it is stale but still inside the bound, dark past
+/// the bound. Those three states are the whole D20 contract, and on 35 pixels
+/// they are watchable without a cable.
+#[cfg(feature = "outage-check")]
+async fn hold_clock(
+    strip: &'static mut Strip,
+    frame: &'static mut [Rgb; STRIP_LENGTH],
+    bits: &'static mut [u8; STRIP_BUFFER_BYTES],
+) -> ! {
+    loop {
+        paint_clock(frame);
+        write_frame(strip, frame, bits);
+        Timer::after(Duration::from_millis(outage::REFRESH_MS)).await;
+    }
+}
+
+/// Paints the time base into `frame`: a seconds bar, coloured by staleness.
+#[cfg(feature = "outage-check")]
+fn paint_clock(frame: &mut [Rgb; STRIP_LENGTH]) {
+    let age = age_secs();
+
+    if let Some(age) = age {
+        // Only the render task writes this, so a read-modify-write is enough.
+        let age = age as u32;
+        if age > outage::MAX_SYNC_AGE.load(Ordering::Relaxed) {
+            outage::MAX_SYNC_AGE.store(age, Ordering::Relaxed);
+        }
+    }
+
+    let colour = match age {
+        // Dark until the first reply, per D20: an unsynchronized clock shows
+        // nothing rather than a plausible guess.
+        None => {
+            frame.fill(Rgb::BLACK);
+            return;
+        }
+        Some(age) if age > outage::BLANK_AFTER_SECS => {
+            frame.fill(Rgb::BLACK);
+            return;
+        }
+        Some(age) if age > outage::STALE_AFTER_SECS => outage::STALE,
+        Some(_) => outage::FRESH,
+    };
+
+    let Some(unix) = clock_unix_now() else {
+        frame.fill(Rgb::BLACK);
+        return;
+    };
+
+    let second = unix % 60;
+    let lit = (second * STRIP_LENGTH as u64 / 60) as usize;
+
+    for (index, slot) in frame.iter_mut().enumerate() {
+        *slot = if index < lit { colour } else { Rgb::BLACK };
     }
 }
 
@@ -1306,34 +1481,44 @@ async fn strip_check(
     frame: &'static mut [Rgb; STRIP_LENGTH],
     bits: &'static mut [u8; STRIP_BUFFER_BYTES],
 ) {
-    #[cfg(feature = "boundary-check")]
-    hold_boundary(strip, frame, bits).await;
+    #[cfg(feature = "outage-check")]
+    {
+        hold_clock(strip, frame, bits).await;
+    }
 
-    #[cfg(all(feature = "identity-check", not(feature = "boundary-check")))]
-    hold_identity(strip, frame, bits).await;
+    // Everything below runs on the full 335-pixel chain, which is what the
+    // outage check replaces rather than sits beside.
+    #[cfg(not(feature = "outage-check"))]
+    {
+        #[cfg(feature = "boundary-check")]
+        hold_boundary(strip, frame, bits).await;
 
-    #[cfg(all(
-        feature = "fill-check",
-        not(feature = "identity-check"),
-        not(feature = "boundary-check")
-    ))]
-    hold_fill(strip, frame, bits).await;
+        #[cfg(all(feature = "identity-check", not(feature = "boundary-check")))]
+        hold_identity(strip, frame, bits).await;
 
-    #[cfg(all(
-        feature = "frame-check",
-        not(feature = "fill-check"),
-        not(feature = "identity-check"),
-        not(feature = "boundary-check")
-    ))]
-    hold_fixture(strip, frame, bits).await;
+        #[cfg(all(
+            feature = "fill-check",
+            not(feature = "identity-check"),
+            not(feature = "boundary-check")
+        ))]
+        hold_fill(strip, frame, bits).await;
 
-    #[cfg(not(any(
-        feature = "frame-check",
-        feature = "fill-check",
-        feature = "identity-check",
-        feature = "boundary-check"
-    )))]
-    walk(strip, frame, bits).await;
+        #[cfg(all(
+            feature = "frame-check",
+            not(feature = "fill-check"),
+            not(feature = "identity-check"),
+            not(feature = "boundary-check")
+        ))]
+        hold_fixture(strip, frame, bits).await;
+
+        #[cfg(not(any(
+            feature = "frame-check",
+            feature = "fill-check",
+            feature = "identity-check",
+            feature = "boundary-check"
+        )))]
+        walk(strip, frame, bits).await;
+    }
 }
 
 /// Holds the alternating boundary pattern, re-sent once a second.
@@ -1441,7 +1626,8 @@ async fn hold_fixture(
         feature = "frame-check",
         feature = "fill-check",
         feature = "identity-check",
-        feature = "boundary-check"
+        feature = "boundary-check",
+        feature = "outage-check"
     ))
 ))]
 async fn walk(
