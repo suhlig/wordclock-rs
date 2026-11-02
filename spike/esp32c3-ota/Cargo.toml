@@ -31,9 +31,11 @@ log = "0.4.27"
 
 embassy-net = { version = "0.9.1", features = [
   "dhcpv4",
+  "dns",
   "log",
   "medium-ethernet",
   "tcp",
+  "udp",
 ] }
 esp-alloc = { version = "0.11.0", features = ["esp32c3", "internal-heap-stats"] }
 esp-backtrace = { version = "0.20.0", features = [
@@ -53,10 +55,20 @@ esp-radio = { version = "1.0.0-beta.1", features = [
 ] }
 smoltcp = { version = "0.14.0", default-features = false, features = [
   "medium-ethernet",
+  "multicast",
   "proto-dhcpv4",
+  "proto-dns",
   "proto-ipv4",
+  "socket-dns",
   "socket-tcp",
+  "socket-udp",
 ] }
+
+# Plain SNTP over UDP for the wall-location survey: the status page has to say
+# whether the clock is synchronized, and there is no other time source in this
+# image yet.
+sntpc = { version = "0.11", default-features = false }
+sntpc-net-embassy = { version = "0.11", default-features = false }
 
 critical-section = "1.2.0"
 static_cell      = "2.1.1"

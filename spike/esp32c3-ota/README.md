@@ -116,7 +116,7 @@ All three succeed, so this is a throughput observation, not a fault. The fixed c
 
 | Request | Behaviour |
 | :--- | :--- |
-| `GET /` | Status document: revision, uptime, heap, running slot, table summary, boot selection, slot state |
+| `GET /` | Status document: revision, uptime, heap, running slot, table summary, boot selection, slot state, address, and SNTP state |
 | `PUT /ota`, `POST /ota` | Streams the body into the inactive slot, then activates it and resets |
 | Anything else | `404` with a hint |
 
@@ -125,6 +125,27 @@ The body is buffered into 4 KiB pages; `esp_storage` erases the affected sector 
 Before activating the new slot the first byte is read back and checked against the `0xE9` magic byte, so uploading the wrong file fails with a `500` and leaves the boot pointer alone.
 
 On boot the firmware reads `otadata` before Wi-Fi starts and repairs it if it is unreadable, then selects the slot it actually booted from. This is what makes the first update work on a board that was flashed with a different partition layout before; without it the library rejects the whole partition with `Error::Invalid`.
+
+### SNTP and the site survey
+
+The image joins Wi-Fi and queries `pool.ntp.org` once a minute, and `GET /` reports what came back:
+
+```
+ip=192.168.10.244
+synced=true sync_age_s=14 last_sync_unix=1793650586
+```
+
+`sync_age_s` counts from the last accepted reply in monotonic seconds, so it keeps rising when the network is away and says exactly how stale the time is. Before the first reply it is `none`. The time source is intentionally not connected to the display in this image: no frame depends on it yet, and a missing network must not change what the strip shows.
+
+That is what makes the wall-location survey a cable-free exercise. Power the board at the clock's position from a phone charger, on USB alone, with no strip attached and nothing wired to the `5V` pin, and read the status page from a phone:
+
+```bash
+curl http://192.168.10.244:3232/
+```
+
+Pass is `synced=true` with `sync_age_s` staying under about 90 s across ten minutes. No address at all means the association failed, which is the radio question; an address with `synced=false` means the association worked and NTP did not, which is a network-policy question. The on-board LED distinguishes the same two cases from across the room: the connecting colour means it never associated, ready means it did.
+
+Do not flash over USB at the wall. If you must use USB, erase the flash first, because the bootloader follows a valid `otadata` entry and would otherwise keep booting the slot the last OTA wrote to.
 
 ## Strip check
 

@@ -21,13 +21,15 @@
 #![deny(clippy::large_stack_frames)]
 
 use core::fmt::Write as _;
-#[cfg(feature = "strip-check")]
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::net::{IpAddr, SocketAddr};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use alloc::string::String;
 
 use embassy_executor::Spawner;
+use embassy_net::dns::DnsQueryType;
 use embassy_net::tcp::{State, TcpSocket};
+use embassy_net::udp::{PacketMetadata, UdpSocket};
 use embassy_net::{Ipv4Address, Ipv4Cidr, Runner, Stack, StackResources, StaticConfigV4};
 use embassy_time::{Duration, Instant, Timer};
 use esp_backtrace as _;
@@ -54,6 +56,8 @@ use esp_radio::wifi::{
 };
 use log::{error, info};
 use smart_leds::{RGB8, SmartLedsWrite};
+use sntpc::{NtpContext, NtpTimestampGenerator, get_time};
+use sntpc_net_embassy::UdpSocketWrapper;
 use static_cell::StaticCell;
 
 #[cfg(feature = "frame-check")]
@@ -87,12 +91,10 @@ macro_rules! mk_static {
 
 /// Bump this before every OTA experiment. The on-board LED blinks it at boot
 /// and `GET /` reports it, which is how an update is verified without USB.
-/// It sits at 23: 20 carried the two bit cells and the `GET /strip` switch that
-/// proved the four-bit one fixes the stray pixel, 21 was that fix with the
-/// scaffolding removed, 22 added the alternating boundary pattern at a dim
-/// colour, and this one raises that pattern to the frame the clock really
-/// shows.
-const REVISION: u32 = 23;
+/// It sits at 24: 23 verified the four-bit strip cell at the production
+/// colour, and this one adds SNTP and the status fields that a site survey
+/// from a phone needs, without a USB cable at the wall.
+const REVISION: u32 = 24;
 
 const OTA_PORT: u16 = 3232;
 const HEADER_MAX: usize = 1024;
@@ -366,6 +368,52 @@ fn now_secs() -> u64 {
     Instant::now().as_secs()
 }
 
+/// The SNTP server. Plain NTP over UDP, so no TLS and no certificate store.
+const NTP_SERVER: &str = "pool.ntp.org";
+
+/// How often to resynchronize. One minute matches the clock's own resolution
+/// and costs nothing.
+const SNTP_RESYNC_SECS: u64 = 60;
+
+/// Whether an SNTP reply has been accepted since boot.
+static SYNCED: AtomicBool = AtomicBool::new(false);
+
+/// Unix seconds reported by the last accepted reply, zero before the first.
+static LAST_SYNC_UNIX: AtomicU32 = AtomicU32::new(0);
+
+/// Monotonic seconds at the last accepted reply, so the status page can show
+/// how old the synchronization is without a wall clock.
+static LAST_SYNC_AT: AtomicU32 = AtomicU32::new(0);
+
+/// The DHCP lease in host byte order, zero until the address arrives.
+static LOCAL_IP: AtomicU32 = AtomicU32::new(0);
+
+/// Timestamp source for the SNTP request.
+///
+/// `sntpc` wants a local clock that is consistent between the send and the
+/// receive; it takes the reply's NTP era from it rather than trusting it as
+/// wall time, so a clock that starts at boot is correct here. That is why this
+/// uses the embassy clock and not the RC `Rtc` — D20 forbids the `Rtc` as the
+/// *display* time base, which is a different job.
+#[derive(Clone, Copy)]
+struct Timestamp {
+    micros: u64,
+}
+
+impl NtpTimestampGenerator for Timestamp {
+    fn init(&mut self) {
+        self.micros = Instant::now().as_micros();
+    }
+
+    fn timestamp_sec(&self) -> u64 {
+        self.micros / 1_000_000
+    }
+
+    fn timestamp_subsec_micros(&self) -> u32 {
+        (self.micros % 1_000_000) as u32
+    }
+}
+
 /// The request line and the headers we care about.
 struct Request {
     is_get: bool,
@@ -610,6 +658,14 @@ fn status_document(
     let _ = writeln!(document, "strip_check={}", strip_state());
     let _ = writeln!(document, "strip_pixels={}", strip_pixels());
     let _ = writeln!(document, "frame_check={}", cfg!(feature = "frame-check"));
+    let _ = writeln!(document, "ip={}", ip_text());
+    let _ = writeln!(
+        document,
+        "synced={} sync_age_s={} last_sync_unix={}",
+        SYNCED.load(Ordering::Relaxed),
+        sync_age(),
+        LAST_SYNC_UNIX.load(Ordering::Relaxed)
+    );
 
     match running_slot(flash, partition_buffer) {
         Ok(slot) => {
@@ -643,6 +699,33 @@ fn status_document(
     }
 
     document
+}
+
+/// The lease as a dotted quad, or `none` before it arrives.
+fn ip_text() -> String {
+    let raw = LOCAL_IP.load(Ordering::Relaxed);
+
+    if raw == 0 {
+        return "none".into();
+    }
+
+    alloc::format!(
+        "{}.{}.{}.{}",
+        (raw >> 24) & 0xff,
+        (raw >> 16) & 0xff,
+        (raw >> 8) & 0xff,
+        raw & 0xff
+    )
+}
+
+/// Seconds since the last accepted SNTP reply, or `none` if there never was one.
+fn sync_age() -> String {
+    if !SYNCED.load(Ordering::Relaxed) {
+        return "none".into();
+    }
+
+    let at = LAST_SYNC_AT.load(Ordering::Relaxed) as u64;
+    alloc::format!("{}", now_secs().saturating_sub(at))
 }
 
 fn describe<T: core::fmt::Debug>(value: Option<T>) -> String {
@@ -1133,11 +1216,16 @@ async fn main(spawner: Spawner) -> ! {
     spawner.spawn(connection(controller).expect("failed to spawn the Wi-Fi task"));
     spawner.spawn(net_task(runner).expect("failed to spawn the network task"));
     spawner.spawn(heartbeat(stack).expect("failed to spawn the heartbeat"));
+    spawner.spawn(sntp_task(stack).expect("failed to spawn the SNTP task"));
 
     set_led(&mut led, LED_CONNECTING);
     stack.wait_config_up().await;
 
     if let Some(config) = stack.config_v4() {
+        LOCAL_IP.store(
+            u32::from_be_bytes(config.address.address().octets()),
+            Ordering::Relaxed,
+        );
         println!(
             "OTA ready on http://{}:{OTA_PORT}/",
             config.address.address()
@@ -1406,13 +1494,93 @@ async fn net_task(mut runner: Runner<'static, Interface>) {
 async fn heartbeat(stack: Stack<'static>) {
     loop {
         match stack.config_v4() {
-            Some(config) => println!(
-                "OTA revision={REVISION} on http://{}:{OTA_PORT}/",
-                config.address.address()
-            ),
+            Some(config) => {
+                LOCAL_IP.store(
+                    u32::from_be_bytes(config.address.address().octets()),
+                    Ordering::Relaxed,
+                );
+                println!(
+                    "OTA revision={REVISION} on http://{}:{OTA_PORT}/ synced={}",
+                    config.address.address(),
+                    SYNCED.load(Ordering::Relaxed)
+                );
+            }
             None => println!("OTA revision={REVISION} waiting for an address"),
         }
 
         Timer::after(Duration::from_secs(10)).await;
+    }
+}
+
+/// Resynchronizes from SNTP and records the result for the status page.
+///
+/// It deliberately does not touch the display: a missing time source must never
+/// change a frame. It waits for the lease, resolves the pool, then queries once
+/// a minute, so the status page can report the age of the last good reply.
+#[allow(
+    clippy::large_stack_frames,
+    reason = "an embassy task future lives in the executor's static task arena, not on \
+    the stack; the size comes from the DNS and SNTP futures, which are outside this crate"
+)]
+#[embassy_executor::task]
+async fn sntp_task(stack: Stack<'static>) {
+    loop {
+        if stack.config_v4().is_none() {
+            Timer::after(Duration::from_secs(1)).await;
+            continue;
+        }
+
+        let address: IpAddr = match stack.dns_query(NTP_SERVER, DnsQueryType::A).await {
+            Ok(addresses) if !addresses.is_empty() => addresses[0].into(),
+            Ok(_) => {
+                error!("DNS returned no address for {NTP_SERVER}");
+                Timer::after(Duration::from_secs(10)).await;
+                continue;
+            }
+            Err(error) => {
+                error!("DNS query failed: {error:?}");
+                Timer::after(Duration::from_secs(10)).await;
+                continue;
+            }
+        };
+
+        let mut rx_meta = [PacketMetadata::EMPTY; 2];
+        let mut rx_buffer = [0u8; 256];
+        let mut tx_meta = [PacketMetadata::EMPTY; 2];
+        let mut tx_buffer = [0u8; 256];
+        let mut socket = UdpSocket::new(
+            stack,
+            &mut rx_meta,
+            &mut rx_buffer,
+            &mut tx_meta,
+            &mut tx_buffer,
+        );
+
+        if let Err(error) = socket.bind(123) {
+            error!("cannot bind the SNTP socket: {error:?}");
+            Timer::after(Duration::from_secs(10)).await;
+            continue;
+        }
+
+        let socket = UdpSocketWrapper::new(socket);
+
+        match get_time(
+            SocketAddr::from((address, 123)),
+            &socket,
+            NtpContext::new(Timestamp { micros: 0 }),
+        )
+        .await
+        {
+            Ok(time) => {
+                let unix = time.sec();
+                SYNCED.store(true, Ordering::Relaxed);
+                LAST_SYNC_UNIX.store(unix as u32, Ordering::Relaxed);
+                LAST_SYNC_AT.store(now_secs() as u32, Ordering::Relaxed);
+                info!("SNTP synchronized: unix={unix}");
+            }
+            Err(error) => error!("SNTP request failed: {error:?}"),
+        }
+
+        Timer::after(Duration::from_secs(SNTP_RESYNC_SECS)).await;
     }
 }
