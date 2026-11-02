@@ -58,13 +58,15 @@ openspec instructions apply --change replace-fadecandy-with-rust
 ./scripts/build-openspec-ebook.sh
 ```
 
-Renders `dist/replace-fadecandy-with-rust.epub` and `.pdf` for reading on a tablet.
+Renders `dist/replace-fadecandy-with-rust.epub` and `.pdf` for reading on a tablet. It always produces **one** book.
 
-The book opens with a cover built from `docs/images/wordclock-front.jpg`, then renders **every change under `openspec/changes/` that has a `proposal.md`**: the primary change first, with its proposal, design, tasks and capability specs under their plain headings, and each further change after it alphabetically with its headings prefixed by the change name so the table of contents cannot show two unrelated `Proposal` entries. A new change joins the book without editing the script; pass a change name to render only that one.
+The book opens with a cover built from `docs/images/wordclock-front.jpg`, then renders **every change under `openspec/changes/` that has a `proposal.md`**: the primary change first, with its proposal, design, tasks and capability specs under their plain headings, and each further change after it alphabetically with its headings prefixed by the change name so the table of contents cannot show two unrelated `Proposal` entries. A new change joins the book without editing the script.
+
+There is deliberately no option to render a subset. An earlier version accepted a change name, which produced a second file with the same title, subtitle and cover but a different scope — impossible to tell apart on a tablet, and never what anyone wanted.
 
 After the changes come the project documentation as reference material: this README, the hardware guide, the ESP32-C3 host audit, the OTA spike runbook, the strip colour fault handover, and the project handoff.
 
-The output keeps the primary change's name even when the book carries more than one, so the paths above stay valid. Mermaid diagrams are rendered with `mermaid-cli`, fetched through `npx` unless `mmdc` is already on `PATH`.
+The output keeps the primary change's name, so the paths above stay valid. Mermaid diagrams are rendered with `mermaid-cli`, fetched through `npx` unless `mmdc` is already on `PATH`.
 
 ## License
 

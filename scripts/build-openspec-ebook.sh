@@ -3,11 +3,13 @@
 # Renders the OpenSpec changes under openspec/changes/ into a single EPUB and a
 # single PDF, so the whole proposal can be read in Apple Books on a tablet.
 #
-#   ./scripts/build-openspec-ebook.sh [change-name]
+#   ./scripts/build-openspec-ebook.sh
 #
-# With no argument it renders every change that has a proposal, the primary one
-# first and the rest alphabetically, so a new change joins the book without
-# editing this file. With an argument it renders only that change.
+# It always produces one book. Every change that has a proposal is included, the
+# primary one first and the rest alphabetically, so a new change joins the book
+# without editing this file. There is deliberately no way to render a subset:
+# a second book with the same cover and a different scope is a trap, not a
+# feature.
 #
 # The book opens with a cover page built from docs/images/wordclock-front.jpg,
 # then the OpenSpec artifacts, then the project documentation (README, hardware
@@ -32,22 +34,19 @@ subtitle="Replacing Fadecandy with a Rust implementation"
 cover="$root/docs/images/wordclock-front.jpg"
 cover_rel="docs/images/wordclock-front.jpg"
 
-# Which changes to render. The primary one leads because the book is named after
-# it and it carries the capability specs the others build on.
+# Every change with a proposal, primary first and the rest alphabetically. The
+# primary leads because the book is named after it and it carries the capability
+# specs the others build on.
 changes=()
-if [[ $# -gt 0 ]]; then
-  changes=("$1")
-else
-  if [[ -f $root/openspec/changes/$primary/proposal.md ]]; then
-    changes+=("$primary")
-  fi
-  for dir in "$root"/openspec/changes/*/; do
-    name=$(basename "${dir%/}")
-    [[ $name == "$primary" || $name == archive ]] && continue
-    [[ -f $dir/proposal.md ]] || continue
-    changes+=("$name")
-  done
+if [[ -f $root/openspec/changes/$primary/proposal.md ]]; then
+  changes+=("$primary")
 fi
+for dir in "$root"/openspec/changes/*/; do
+  slug=$(basename "${dir%/}")
+  [[ $slug == "$primary" || $slug == archive ]] && continue
+  [[ -f $dir/proposal.md ]] || continue
+  changes+=("$slug")
+done
 
 if [[ ${#changes[@]} -eq 0 ]]; then
   echo "no OpenSpec change with a proposal.md under openspec/changes" >&2
