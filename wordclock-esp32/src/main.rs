@@ -6,6 +6,7 @@
 //! the inactive OTA slot.
 //!
 //! - `GET /` returns a plain-text status document (revision, uptime, slot).
+//! - `GET /log` returns the recent log lines kept in RAM.
 //! - `PUT /ota` takes the raw `espflash save-image` output as the request body.
 //!
 //! Power it from the `5V` pin (header pin 19), never from USB and the 5 V rail
@@ -61,6 +62,7 @@ use static_cell::StaticCell;
 
 use wordclock_esp32::config;
 use wordclock_esp32::display::StripDisplay;
+use wordclock_esp32::eventlog;
 use wordclock_esp32::provision;
 
 use chrono::{Datelike, Timelike};
@@ -95,12 +97,13 @@ macro_rules! mk_static {
 /// phone needs, and this one drives a 35-pixel offcut from the synchronized
 /// clock, drops the link on a timer and blanks past a three-minute bound, so the
 /// outage behaviour is testable without touching the household access point.
-const REVISION: u32 = 32;
+const REVISION: u32 = 33;
 
 const OTA_PORT: u16 = 3232;
 const HEADER_MAX: usize = 1024;
 const PAGE_SIZE: usize = 4096;
 const SOCKET_BUFFER: usize = 4096;
+const LOG_SNAPSHOT_SIZE: usize = eventlog::CAPACITY;
 
 const SSID: &str = env!("WORDCLOCK_WIFI_SSID");
 const PASSWORD: &str = env!("WORDCLOCK_WIFI_PASSWORD");
@@ -304,6 +307,7 @@ static PAGE: StaticCell<Aligned<PAGE_SIZE>> = StaticCell::new();
 static HEADER: StaticCell<Aligned<HEADER_MAX>> = StaticCell::new();
 static SOCKET_RX: StaticCell<Aligned<SOCKET_BUFFER>> = StaticCell::new();
 static SOCKET_TX: StaticCell<Aligned<SOCKET_BUFFER>> = StaticCell::new();
+static LOG_SNAPSHOT: StaticCell<Aligned<LOG_SNAPSHOT_SIZE>> = StaticCell::new();
 
 /// Fixture used by the frame-check build, matching `examples/dump_frame.rs`
 /// and the frame the gate measured.
@@ -475,6 +479,7 @@ struct Request {
     is_get: bool,
     is_put: bool,
     targets_ota: bool,
+    targets_log: bool,
     #[cfg_attr(not(feature = "frame-check"), allow(dead_code))]
     targets_frame: bool,
     content_length: Option<usize>,
@@ -493,6 +498,7 @@ fn parse_request(header: &str) -> Result<Request, &'static str> {
         is_get: method.eq_ignore_ascii_case("GET"),
         is_put: method.eq_ignore_ascii_case("PUT") || method.eq_ignore_ascii_case("POST"),
         targets_ota: target == "/ota",
+        targets_log: target == "/log",
         targets_frame: target == "/frame",
         content_length: None,
         expect_continue: false,
@@ -1012,12 +1018,20 @@ async fn handle(
     socket: &mut TcpSocket<'_>,
     page: &mut Aligned<PAGE_SIZE>,
     header_buffer: &mut Aligned<HEADER_MAX>,
+    log_buffer: &mut Aligned<LOG_SNAPSHOT_SIZE>,
     flash: &mut FlashStorage<'static>,
     partition_buffer: &mut Aligned<PARTITION_TABLE_MAX_LEN>,
     led: &mut Leds<'_>,
 ) -> Result<Outcome, &'static str> {
     let (header, leftover) = read_headers(socket, header_buffer).await?;
     let request = parse_request(header)?;
+
+    if request.is_get && request.targets_log {
+        let count = eventlog::snapshot(&mut log_buffer.0);
+        let body = core::str::from_utf8(&log_buffer.0[..count]).unwrap_or("");
+        respond(socket, "200 OK", body).await?;
+        return Ok(KeepRunning);
+    }
 
     if request.is_get && !request.targets_ota && !request.targets_frame {
         let body = status_document(flash, partition_buffer);
@@ -1038,7 +1052,7 @@ async fn handle(
         respond(
             socket,
             "404 Not Found",
-            "GET / for status, PUT /ota with an app image\n",
+            "GET / for status, GET /log for recent logs, PUT /ota with an app image\n",
         )
         .await?;
         return Ok(KeepRunning);
@@ -1119,6 +1133,7 @@ async fn serve(
     let header = HEADER.init(Aligned([0; HEADER_MAX]));
     let rx = SOCKET_RX.init(Aligned([0; SOCKET_BUFFER]));
     let tx = SOCKET_TX.init(Aligned([0; SOCKET_BUFFER]));
+    let log_buffer = LOG_SNAPSHOT.init(Aligned([0; LOG_SNAPSHOT_SIZE]));
 
     loop {
         set_led(led, LED_READY);
@@ -1135,6 +1150,7 @@ async fn serve(
             &mut socket,
             &mut *page,
             &mut *header,
+            &mut *log_buffer,
             &mut *flash,
             &mut *partition_buffer,
             &mut *led,
@@ -1164,7 +1180,14 @@ async fn serve(
 )]
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
-    esp_println::logger::init_logger_from_env();
+    // SAFETY: the C3 has no atomic read-modify-write instructions, so the safe
+    // `log::set_logger` is compiled out for this target. This runs once at the
+    // top of `main`, before the scheduler, the radio, or any interrupt that
+    // logs exists, so nothing can race with it.
+    unsafe {
+        log::set_logger_racy(&eventlog::LOGGER).expect("the logger is installed once");
+        log::set_max_level_racy(eventlog::level_filter());
+    }
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);

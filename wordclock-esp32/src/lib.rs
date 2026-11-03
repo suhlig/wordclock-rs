@@ -11,6 +11,8 @@ pub mod config;
 #[cfg(target_arch = "riscv32")]
 pub mod display;
 #[cfg(target_arch = "riscv32")]
+pub mod eventlog;
+#[cfg(target_arch = "riscv32")]
 pub mod provision;
 
 pub use wordclock_core::*;

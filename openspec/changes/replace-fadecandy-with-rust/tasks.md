@@ -104,7 +104,7 @@ Execute 6A and 6C. Section 6B is the Pi fallback and is not executed.
 - [x] 6C.4 `clock_task` renders on the minute, refreshes at 1 Hz, keeps the per-minute color cache, and uses `berlin_local_from_utc` for DST.
 - [x] 6C.5 The RWDT watchdog is enabled at 30 s and fed by a task that stops feeding when the clock heartbeat is older than 10 s, so a stalled output task resets the board.
 - [x] 6C.6 OTA with an A/B partition, rollback, and a readable revision; revision 28 was delivered over the air.
-- [ ] 6C.7 Logging is serial only; network logging and the power-loss note remain.
+- [x] 6C.7 Logging is captured through the `log` facade into a 4 KiB RAM ring and served at `GET /log`; revision 33 served its boot lines over the network. The ring is volatile, which is documented with the power-loss note in `docs/esp32-c3.md`.
 - [ ] 6C.8 Host tests pass and the on-device clock smoke test passed at revision 28; daemon state-machine tests remain.
 
 ## 7. Build and release (selected host)
@@ -143,7 +143,7 @@ Execute 8B. Section 8A is the Pi fallback and is not executed.
 
 - [x] 8B.1 `docs/esp32-c3.md` documents the flash record, USB serial provisioning, and the gitignored `wifi.env`; the release image is credential-free.
 - [x] 8B.2 `docs/esp32-c3.md` documents build, first flash, OTA, SHA-256 comparison, and the A/B rollback image.
-- [ ] 8B.3 The NVS load path is verified (revision 32, credential-free image joined from flash); a blank-board serial provisioning run remains.
+- [ ] 8B.3 The NVS load path is verified (revision 32, credential-free image joined from flash); the blank-board serial provisioning run waits for the second board on order, because the current unit is provisioned and must stay on the wall.
 - [x] 8B.4 The Pi and Fadecandy clock stay the rollback until the stability window; `docs/esp32-c3.md` states the policy.
 - [x] 8B.5 `docs/esp32-c3.md` documents the OTA rollback and USB reflash procedures.
 

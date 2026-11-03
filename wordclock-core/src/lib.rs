@@ -15,6 +15,7 @@ extern crate std;
 pub mod clock;
 pub mod color;
 pub mod frame;
+pub mod logring;
 pub mod strip;
 pub mod timezone;
 

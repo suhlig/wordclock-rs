@@ -119,6 +119,27 @@ The fields that matter:
 
 The status page is unreachable while the network is down; that is expected.
 
+## Logging
+
+The firmware keeps the most recent log lines in a 4 KiB ring in RAM and serves them on the same port:
+
+```bash
+curl http://<board-ip>:3232/log
+```
+
+Each line starts with the uptime in seconds, then the level and the message, so an event can be placed relative to a boot or an outage without a serial console. The ring captures the same lines that go to USB serial, including the Wi-Fi and network stack messages, because both paths go through the `log` facade. `ESP_LOG` still selects the level at build time.
+
+A sample from revision 33:
+
+```text
+    13 INFO running from Ota1; OTA ready
+    13 INFO Connecting to Wi-Fi
+    14 INFO Wi-Fi connected: ConnectedInfo { ssid: "...", channel: 1, authmode: Wpa2Personal, aid: 0 }
+    24 INFO SNTP synchronized: unix=1793730962
+```
+
+The ring drops the oldest whole lines when it fills, and it is volatile: a reset or a power cut clears it. That is deliberate, because a flash-backed log would cost a sector and wear for information the counters already summarise. Fetch `/log` before cutting power, and use `/` for the counters that survive a network drop.
+
 ## Test patterns and physical mapping
 
 The diagnostic patterns live in the spike, `spike/esp32c3-ota`, not in the production firmware. Use them before trusting identity mapping:
