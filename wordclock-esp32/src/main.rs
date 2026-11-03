@@ -42,6 +42,8 @@ use esp_bootloader_esp_idf::partitions::{
 use esp_hal::clock::CpuClock;
 use esp_hal::rmt::Rmt;
 use esp_hal::rng::Rng;
+use esp_hal::rtc_cntl::{Rtc, Rwdt, RwdtStage};
+use esp_hal::time::Duration as HalDuration;
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal_smartled::{RmtSmartLeds, buffer_size, color_order};
@@ -90,7 +92,7 @@ macro_rules! mk_static {
 /// phone needs, and this one drives a 35-pixel offcut from the synchronized
 /// clock, drops the link on a timer and blanks past a three-minute bound, so the
 /// outage behaviour is testable without touching the household access point.
-const REVISION: u32 = 28;
+const REVISION: u32 = 29;
 
 const OTA_PORT: u16 = 3232;
 const HEADER_MAX: usize = 1024;
@@ -385,6 +387,13 @@ static LAST_SYNC_AT: AtomicU32 = AtomicU32::new(0);
 
 /// The DHCP lease in host byte order, zero until the address arrives.
 static LOCAL_IP: AtomicU32 = AtomicU32::new(0);
+
+/// Set once the clock task has started, so the watchdog does not treat a
+/// missing strip as a stalled clock.
+static CLOCK_PRESENT: AtomicBool = AtomicBool::new(false);
+
+/// `now_secs()` at the last clock-task iteration.
+static CLOCK_HEARTBEAT: AtomicU32 = AtomicU32::new(0);
 
 /// Settings for the outage check, in one gate so the feature predicates stay
 /// in one place instead of on every constant.
@@ -1154,6 +1163,17 @@ async fn main(spawner: Spawner) -> ! {
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     esp_rtos::start(timg0.timer0, peripherals.FROM_CPU_INTR0);
 
+    // The hardware watchdog resets the board if the clock task stalls. The
+    // feeder below stops feeding when the heartbeat is older than 10 s, so a
+    // hung output task becomes a reboot instead of a frozen clock. A missing
+    // strip does not count as a stall, because the OTA server must stay
+    // reachable so the image can be replaced.
+    let rtc = Rtc::new(peripherals.RTC_TIMER);
+    let mut rwdt = rtc.rwdt;
+    rwdt.set_timeout(RwdtStage::Stage0, HalDuration::from_secs(30));
+    rwdt.enable();
+    spawner.spawn(watchdog_task(rwdt).expect("failed to spawn the watchdog task"));
+
     let frequency = Rate::from_mhz(80);
     let rmt = Rmt::new(peripherals.RMT, frequency).expect("Failed to initialize RMT");
     let mut led =
@@ -1626,6 +1646,9 @@ async fn clock_task(
     let mut last_minute: Option<(i32, u32, u32, u32, u32)> = None;
 
     loop {
+        CLOCK_PRESENT.store(true, Ordering::Relaxed);
+        CLOCK_HEARTBEAT.store(now_secs() as u32, Ordering::Relaxed);
+
         let show = age_secs().is_some_and(|age| age <= BLANK_AFTER_SECS);
 
         if show {
@@ -1662,6 +1685,29 @@ async fn clock_task(
             write_frame(strip, out);
         }
 
+        Timer::after(Duration::from_secs(1)).await;
+    }
+}
+
+/// Feeds the hardware watchdog while the clock task is alive.
+///
+/// If the clock task is present but has not ticked for 10 s, the feeder stops
+/// and the 30 s RWDT resets the board. A missing strip does not count as a
+/// stall: the OTA server must stay reachable so the image can be replaced.
+#[embassy_executor::task]
+async fn watchdog_task(mut rwdt: Rwdt) -> ! {
+    loop {
+        if CLOCK_PRESENT.load(Ordering::Relaxed) {
+            let beat = u64::from(CLOCK_HEARTBEAT.load(Ordering::Relaxed));
+            if now_secs().saturating_sub(beat) > 10 {
+                error!("clock task stalled; letting the watchdog reset");
+                loop {
+                    Timer::after(Duration::from_secs(1)).await;
+                }
+            }
+        }
+
+        rwdt.feed();
         Timer::after(Duration::from_secs(1)).await;
     }
 }

@@ -102,7 +102,7 @@ Execute 6A and 6C. Section 6B is the Pi fallback and is not executed.
 - [ ] 6C.2 Configuration is compiled in for v1 (strip length, birthdays, Europe/Berlin); NVS/LittleFS remains.
 - [x] 6C.3 Wi-Fi association, reconnect, the SNTP startup gate, and 60 s resynchronization are ported from the spike.
 - [x] 6C.4 `clock_task` renders on the minute, refreshes at 1 Hz, keeps the per-minute color cache, and uses `berlin_local_from_utc` for DST.
-- [ ] 6C.5 The hardware watchdog and output-task restart are not implemented yet.
+- [x] 6C.5 The RWDT watchdog is enabled at 30 s and fed by a task that stops feeding when the clock heartbeat is older than 10 s, so a stalled output task resets the board.
 - [x] 6C.6 OTA with an A/B partition, rollback, and a readable revision; revision 28 was delivered over the air.
 - [ ] 6C.7 Logging is serial only; network logging and the power-loss note remain.
 - [ ] 6C.8 Host tests pass and the on-device clock smoke test passed at revision 28; daemon state-machine tests remain.
