@@ -1,0 +1,38 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          targets: riscv32imc-unknown-none-elf
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install espflash --locked
+      - run: cargo build --release --target riscv32imc-unknown-none-elf -p wordclock-esp32
+      - name: Package the firmware
+        run: |
+          set -euo pipefail
+          image="wordclock-esp32-${GITHUB_REF_NAME}.bin"
+          espflash save-image --chip esp32c3 \
+            target/riscv32imc-unknown-none-elf/release/wordclock-esp32 "$image"
+          sha256sum "$image" > "$image.sha256"
+          cp wordclock-esp32/partitions.csv "wordclock-esp32-${GITHUB_REF_NAME}-partitions.csv"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            wordclock-esp32-${{ github.ref_name }}.bin
+            wordclock-esp32-${{ github.ref_name }}.bin.sha256
+            wordclock-esp32-${{ github.ref_name }}-partitions.csv
+          body: |
+            ESP32-C3 firmware ${{ github.ref_name }}.
+
+            This image is built without Wi-Fi credentials. Build the device image locally with your gitignored `wifi.env`; see `docs/esp32-c3.md`.

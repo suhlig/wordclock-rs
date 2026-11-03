@@ -5,3 +5,6 @@
 .vscode/
 *.log
 /dist
+
+**/wifi.env
+**/ota.env

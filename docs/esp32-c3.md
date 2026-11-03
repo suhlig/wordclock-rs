@@ -80,6 +80,7 @@ First flash, with the 5 V rail **off**:
 
 ```bash
 espflash flash --monitor --chip esp32c3 \
+  --partition-table wordclock-esp32/partitions.csv \
   target/riscv32imc-unknown-none-elf/release/wordclock-esp32
 ```
 

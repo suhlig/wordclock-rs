@@ -121,11 +121,11 @@ Execute 7B. Section 7A is the Pi fallback and is not executed.
 
 ### 7B. ESP32-C3 (selected)
 
-- [ ] 7B.1 Add CI for `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test --all-targets` on default features.
-- [ ] 7B.2 Build the `riscv32imc-unknown-none-elf` firmware with `espflash` and publish the image with its checksum.
-- [ ] 7B.3 Publish the partition/OTA metadata and the flashing instructions with the release.
-- [ ] 7B.4 Verify the release image boots on the C3, joins Wi-Fi, synchronizes, reports its version, and renders the fixture frame.
-- [ ] 7B.5 Pin the ESP toolchain and crate versions and add Dependabot coverage.
+- [x] 7B.1 `.github/workflows/ci.yml` runs fmt, clippy, and `test --all-targets` on the host and builds the firmware for `riscv32imc-unknown-none-elf`.
+- [x] 7B.2 `.github/workflows/release.yml` builds the image, writes a SHA-256, and attaches both to the release.
+- [x] 7B.3 The release attaches `partitions.csv`; `docs/esp32-c3.md` carries the flashing instructions.
+- [ ] 7B.4 The local revision 29 image is verified; the credential-free release image needs a local rebuild with `wifi.env` to join Wi-Fi.
+- [x] 7B.5 The toolchain is pinned to 1.99.1, the crate versions are pinned in `wordclock-esp32/Cargo.toml`, and Dependabot covers cargo and actions.
 
 ## 8. Deployment and legacy removal (selected host)
 
