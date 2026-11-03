@@ -1,42 +1,9 @@
-[package]
-name = "wordclock"
-version = "0.1.0"
-edition = "2024"
-description = "Word clock daemon for a 288-pixel WS2812 strip on a Raspberry Pi"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/suhlig/wordclock-rs"
-readme = "README.md"
-
-[features]
-# The host build uses `std` for OS entropy in `ColorPicker::new`. The core
-# modules also compile without it, which is what the ESP32-C3 firmware needs.
-default = ["std"]
-std = []
-hardware = ["dep:rppal"]
-
-[dependencies]
-anyhow = "1"
-chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-clap = { version = "4", features = ["derive"] }
-computus = "2"
-fastrand = "2"
-libm = "0.2"
-serde = { version = "1", features = ["derive"] }
-thiserror = "2"
-toml = "1"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-rppal = { version = "0.22", features = ["hal"], optional = true }
-
-[dev-dependencies]
-assert_cmd = "2"
-chrono-tz = "0.10"
-predicates = "3"
-rstest = "0.28"
-serde_json = "1"
-sha2 = "0.10"
-tempfile = "3"
+[workspace]
+resolver = "2"
+members = ["wordclock-core", "wordclock-host", "wordclock-esp32"]
+# The ESP32-C3 spike crates are standalone: they have their own lockfiles and
+# targets, and they are reference material rather than workspace members.
+exclude = ["spike"]
 
 [profile.release]
 opt-level = 3

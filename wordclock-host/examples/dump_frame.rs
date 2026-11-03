@@ -6,8 +6,8 @@
 //! Usage: `cargo run --example dump_frame -- "15.07.2026 06:30" [--color RRGGBB] [--seed N]`
 
 use anyhow::{Context, Result, bail};
-use wordclock::color::{ColorPicker, GammaLut, Rgb};
-use wordclock::sim::{self, RenderOptions};
+use wordclock_core::color::{ColorPicker, GammaLut, Rgb};
+use wordclock_host::sim::{self, RenderOptions};
 
 fn main() -> Result<()> {
     let mut time: Option<String> = None;

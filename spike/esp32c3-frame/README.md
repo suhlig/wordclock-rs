@@ -2,7 +2,7 @@
 
 This is the gate artifact for task 4.6: it renders the 06:30 frame on the ESP32-C3 and prints the same dump the host simulator prints, so the two can be compared with `diff`.
 
-The library does not copy the core code. It includes the real `src/clock.rs`, `src/color.rs`, and `src/frame.rs` from the repository root through `#[path]`, with the crate-root constants and `extern crate alloc` that those modules expect. That makes the spike a compile check of the `no_std` + `alloc` boundary described in `docs/esp32-c3-spike.md` section 4.1 as well as a behavioral check.
+The library does not copy the core code. It includes the real `wordclock-core/src/clock.rs`, `wordclock-core/src/color.rs`, and `wordclock-core/src/frame.rs` from the repository root through `#[path]`, with the crate-root constants and `extern crate alloc` that those modules expect. That makes the spike a compile check of the `no_std` + `alloc` boundary described in `docs/esp32-c3-spike.md` section 4.1 as well as a behavioral check.
 
 - Board: ESP32-C3-DevKit-RUST-1
 - No Wi-Fi, no RMT: this spike only computes and prints

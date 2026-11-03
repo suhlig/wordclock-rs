@@ -19,14 +19,14 @@ pub const ROWS: usize = 16;
 /// Number of logical word pixels driven by the clock.
 pub const LOGICAL_PIXELS: usize = 288;
 
-#[path = "../../../src/clock.rs"]
+#[path = "../../../wordclock-core/src/clock.rs"]
 pub mod clock;
 
-#[path = "../../../src/color.rs"]
+#[path = "../../../wordclock-core/src/color.rs"]
 pub mod color;
 
-#[path = "../../../src/frame.rs"]
+#[path = "../../../wordclock-core/src/frame.rs"]
 pub mod frame;
 
-#[path = "../../../src/strip.rs"]
+#[path = "../../../wordclock-core/src/strip.rs"]
 pub mod strip;

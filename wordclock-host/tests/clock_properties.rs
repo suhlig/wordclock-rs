@@ -1,5 +1,5 @@
-use wordclock::clock;
-use wordclock::{COLS, LOGICAL_PIXELS};
+use wordclock_core::clock;
+use wordclock_core::{COLS, LOGICAL_PIXELS};
 
 const MIN_LIT: usize = 11;
 const MAX_LIT: usize = 39;

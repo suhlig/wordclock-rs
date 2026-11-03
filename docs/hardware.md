@@ -211,7 +211,7 @@ With the C3 streaming frames back-to-back, this measured a 0.708 µs longest int
 
 WARNING: RP2040 and RP2350 GPIO are 3.3 V only and are not 5 V tolerant. Clip to GPIO10 or to pin 2 (1A). Never connect the shifted 5 V signal at pin 3 (1Y) or at strip DIN directly to a Pico pin; use a 10 kΩ/10 kΩ divider if the 5 V side must be observed. A dedicated analyzer with adjustable thresholds does not have this limitation.
 
-What to look for in a capture: a 0.4 µs high pulse for a zero bit, 0.8 µs for a one bit, and gaps that stay far below the 50 µs reset threshold. On the ESP32-C3 at 2.5 MHz each WS2812 bit is encoded as four SPI bits, so a zero appears as `1000` and a one as `1100`. That puts both data pulses on their datasheet nominal and leaves gaps of 1.2 µs and 0.8 µs; the bit period is 1.6 µs, longer than the 1.25 µs nominal and inside the tolerance. The clock, the cells and the reset live in `src/strip.rs`, and its host tests derive the waveform and check it, so a capture only has to confirm what a test already asserts.
+What to look for in a capture: a 0.4 µs high pulse for a zero bit, 0.8 µs for a one bit, and gaps that stay far below the 50 µs reset threshold. On the ESP32-C3 at 2.5 MHz each WS2812 bit is encoded as four SPI bits, so a zero appears as `1000` and a one as `1100`. That puts both data pulses on their datasheet nominal and leaves gaps of 1.2 µs and 0.8 µs; the bit period is 1.6 µs, longer than the 1.25 µs nominal and inside the tolerance. The clock, the cells and the reset live in `wordclock-core/src/strip.rs`, and its host tests derive the waveform and check it, so a capture only has to confirm what a test already asserts.
 
 ## Power and grounding
 

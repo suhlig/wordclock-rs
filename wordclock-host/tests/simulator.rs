@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 
 use chrono::{NaiveDate, NaiveDateTime};
-use wordclock::color::{ColorPicker, GammaLut, Rgb};
-use wordclock::display::{Display, TerminalDisplay};
-use wordclock::sim::{self, RenderOptions};
+use wordclock_core::color::{ColorPicker, GammaLut, Rgb};
+use wordclock_host::display::{Display, TerminalDisplay};
+use wordclock_host::sim::{self, RenderOptions};
 
 fn at(year: i32, month: u32, day: u32, hour: u32, minute: u32) -> NaiveDateTime {
     NaiveDate::from_ymd_opt(year, month, day)
@@ -12,7 +12,7 @@ fn at(year: i32, month: u32, day: u32, hour: u32, minute: u32) -> NaiveDateTime 
         .expect("valid time")
 }
 
-fn render_at(datetime: NaiveDateTime, options: &RenderOptions) -> wordclock::frame::Frame {
+fn render_at(datetime: NaiveDateTime, options: &RenderOptions) -> wordclock_core::frame::Frame {
     let mut picker = ColorPicker::new(options.seed, options.birthdays.clone());
     picker.begin_minute();
     sim::render(datetime, &mut picker, options)

@@ -8,10 +8,10 @@ use std::time::Duration;
 use anyhow::{Result, bail};
 use chrono::{Local, NaiveDate, NaiveDateTime, Timelike};
 
-use crate::clock;
-use crate::color::{ColorPicker, DEFAULT_BIRTHDAYS, GammaLut, Rgb};
 use crate::display::{Display, TerminalDisplay};
-use crate::frame::Frame;
+use wordclock_core::clock;
+use wordclock_core::color::{ColorPicker, DEFAULT_BIRTHDAYS, GammaLut, Rgb};
+use wordclock_core::frame::Frame;
 
 /// Options shared by `sim` and `demo`.
 #[derive(Clone, Debug)]
@@ -35,7 +35,7 @@ impl Default for RenderOptions {
             seed: None,
             birthdays: DEFAULT_BIRTHDAYS.to_vec(),
             whitepoint: [1.0, 1.0, 1.0],
-            physical_len: crate::LOGICAL_PIXELS,
+            physical_len: wordclock_core::LOGICAL_PIXELS,
         }
     }
 }
@@ -149,7 +149,7 @@ mod tests {
     use chrono::NaiveDate;
 
     use super::*;
-    use crate::color::ColorPicker;
+    use wordclock_core::color::ColorPicker;
 
     #[test]
     fn parses_legacy_and_iso_times() {

@@ -1,22 +1,20 @@
 //! Core, hardware-independent logic for the word clock.
 //!
-//! The modules in this crate turn a local time into a frame of logical pixels.
-//! The SPI output backend lives behind the `hardware` feature; everything else
-//! builds and tests on any platform.
+//! These modules turn a local time into a frame of logical pixels and encode
+//! that frame as a WS2812 bitstream. They build with `no_std` and `alloc`, so
+//! the same files run on the host and on the ESP32-C3 firmware.
 
+#![no_std]
 #![forbid(unsafe_code)]
 
-// `core` modules use `alloc` types directly so the same files can be included
-// by the `no_std` ESP32-C3 firmware without a `std` prelude.
 extern crate alloc;
+
+#[cfg(test)]
+extern crate std;
 
 pub mod clock;
 pub mod color;
-pub mod config;
-pub mod daemon;
-pub mod display;
 pub mod frame;
-pub mod sim;
 pub mod strip;
 pub mod timezone;
 

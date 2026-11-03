@@ -2,7 +2,7 @@
 
 This is the measurement harness for the ESP32-C3 side of design D16. It combines Wi-Fi association, DHCP, SNTP, the real host core with the `Europe/Berlin` rule, and a 288-pixel RMT frame in one image, and prints the timings the gate asks for.
 
-The library includes the real `src/clock.rs`, `src/color.rs`, `src/frame.rs`, and `src/timezone.rs` through `#[path]`, so the measurements exercise the same code the host runs rather than a copy.
+The library includes the real `wordclock-core/src/clock.rs`, `wordclock-core/src/color.rs`, `wordclock-core/src/frame.rs`, and `wordclock-core/src/timezone.rs` through `#[path]`, so the measurements exercise the same code the host runs rather than a copy.
 
 - Board: ESP32-C3-DevKit-RUST-1
 - LED data: GPIO2 over RMT, 288 logical pixels, `WS2812_TIMING`, GRB order

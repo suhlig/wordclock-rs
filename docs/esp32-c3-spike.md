@@ -61,13 +61,13 @@ Offcut through the level shifter (2026-10-31):
 
 ## 4.5 Timezone
 
-- Implemented in `src/timezone.rs`: `berlin_local_from_utc` and `dst_bounds` use the last Sunday in March and October at 01:00 UTC.
+- Implemented in `wordclock-core/src/timezone.rs`: `berlin_local_from_utc` and `dst_bounds` use the last Sunday in March and October at 01:00 UTC.
 - Verified against `chrono_tz::Europe::Berlin` for every hour from 2026-01-01 through 2030-12-31, plus explicit spring and autumn transition tests.
 - The firmware can reuse the rule directly; it does not need the full timezone database.
 
 ## 4.6 Fixture frame
 
-- `spike/esp32c3-frame` includes the real `src/clock.rs`, `src/color.rs`, and `src/frame.rs` through `#[path]`, so it runs the host code rather than a copy. It also proves that the core compiles for `riscv32imc-unknown-none-elf` with `no_std` + `alloc`.
+- `spike/esp32c3-frame` includes the real `wordclock-core/src/clock.rs`, `wordclock-core/src/color.rs`, and `wordclock-core/src/frame.rs` through `#[path]`, so it runs the host code rather than a copy. It also proves that the core compiles for `riscv32imc-unknown-none-elf` with `no_std` + `alloc`.
 - Three scenarios at 06:30: fixed color `c04020` on 2026-07-15, seed 42 on the same regular day, and seed 42 on Rosenmontag 2026-02-16 for per-pixel sampling.
 - The device dump and `examples/dump_frame.rs` are byte-identical after stripping the serial CRLF: 870 lines, empty `diff`. That covers the 288 logical pixels, the raw colors, and the gamma-corrected colors, including the split `HALB`/`SIEBEN` run.
 - Image size: 102,800 of 4,128,768 bytes (2.49%) without Wi-Fi, RMT, or the timezone rule.
@@ -114,7 +114,7 @@ The single 5 V decision (design D9 of `add-power-budget-and-current-sensing`) re
   - keep the 10 kΩ pull-down on the shifter's input, on principle: with it the flash shrank from the whole strip to the first 19–20 pixels, and after the timing fix ten of ten power-ups were clean. The combination of an early first frame *without* it was never measured.
 - The 335-pixel chain exposed a platform limit that belongs in D16's column: the C3 has 48 RMT codes per channel, so a full frame of 8,042 codes is sent by refilling that block from a busy-poll loop every 30 µs. If an interrupt holds the CPU past that deadline the hardware wraps the block and transmits it again, shifting the rest of the frame by two pixels per wrap. Measured on a walk: one step's lit pixel appeared about 36 pixels further down the chain while the rest of the frame was correct — 18 wraps, roughly 1.1 ms of interrupt time. Writing each frame twice turned that into a brief flicker rather than a cure.
 - The cure is to leave the CPU out of the timing path: the strip runs on **SPI2 with DMA at 2.5 MHz, four SPI bits per LED bit** (`0` → `1000`, `1` → `1100`), with GPIO3 as MOSI and DMA streaming a 4 KiB bitstream. A full 335-pixel walk runs with **no glitches at all**, where RMT produced a few per sweep. This retires the earlier clean RMT result: that capture ran with `frame-loop`, i.e. without Wi-Fi. The firmware for the clock must use SPI with DMA, not RMT, and the Pi's SPI path lands in the same place.
-- The first SPI build used **three** SPI bits per LED bit (`0` → `100`, `1` → `110`) at 2.5 MHz, which ties the gap after a `1` to exactly one clock, 400 ns. That gap is the only place the strip misbehaved: a pixel whose last LED bit was a `1` was followed by a stray pixel carrying `G = 0x80`. Revision 20 moved to the four-bit cell, which leaves 800 ns there while keeping both data pulses at their nominal widths. The timing is now data in `src/strip.rs` and is asserted by that module's tests instead of being argued about in a comment. See `docs/strip-colour-fault-handover.md`.
+- The first SPI build used **three** SPI bits per LED bit (`0` → `100`, `1` → `110`) at 2.5 MHz, which ties the gap after a `1` to exactly one clock, 400 ns. That gap is the only place the strip misbehaved: a pixel whose last LED bit was a `1` was followed by a stray pixel carrying `G = 0x80`. Revision 20 moved to the four-bit cell, which leaves 800 ns there while keeping both data pulses at their nominal widths. The timing is now data in `wordclock-core/src/strip.rs` and is asserted by that module's tests instead of being argued about in a comment. See `docs/strip-colour-fault-handover.md`.
 - Not verified: update behaviour during a Wi-Fi outage; and whether the 3× slower upload on the un-decoupled 5 V rail is supply noise, given that one sample with 1000 µF came back near the USB figure.
 
 ## 4.9 Decision

@@ -249,6 +249,8 @@ fn days_before(date: NaiveDate, days: u64) -> NaiveDate {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+    use std::string::String;
+    use std::{format, vec};
 
     use chrono::NaiveDate;
     use sha2::{Digest, Sha256};

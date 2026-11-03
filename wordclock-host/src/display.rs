@@ -7,9 +7,9 @@
 
 use std::io::{self, Write};
 
-use crate::clock::STRIPE;
-use crate::color::Rgb;
-use crate::{COLS, LOGICAL_PIXELS, ROWS};
+use wordclock_core::clock::STRIPE;
+use wordclock_core::color::Rgb;
+use wordclock_core::{COLS, LOGICAL_PIXELS, ROWS};
 
 /// Whether SPI hardware support was compiled into this build.
 pub const HARDWARE_ENABLED: bool = cfg!(feature = "hardware");

@@ -271,7 +271,7 @@ const IDENTITY_OFFSET: usize = 1;
 /// The DMA buffer: one encoded frame plus its reset tail.
 ///
 /// The waveform itself is not defined here. The SPI clock, the bit cell and the
-/// reset length are in `src/strip.rs`, and that module's host tests derive the
+/// reset length are in `wordclock-core/src/strip.rs`, and that module's host tests derive the
 /// four pulse widths and the reset from them and check them against the
 /// `WS2812B` datasheet window. Nothing about the timing is tuned in this file.
 #[cfg(feature = "strip-check")]

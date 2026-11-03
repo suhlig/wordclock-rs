@@ -1,0 +1,23 @@
+[package]
+name = "wordclock-core"
+version = "0.1.0"
+edition = "2024"
+description = "Hardware-independent clock, color, frame, and strip logic for the word clock"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/suhlig/wordclock-rs"
+
+[features]
+# The seedless `ColorPicker::new` arm needs `fastrand::Rng::new`, which is
+# std-only. The firmware seeds its own RNG and uses `ColorPicker::from_rng`.
+default = []
+std = ["chrono/std", "fastrand/std"]
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["alloc"] }
+computus = "2"
+fastrand = { version = "2", default-features = false, features = ["alloc"] }
+libm = "0.2"
+
+[dev-dependencies]
+chrono-tz = "0.10"
+sha2 = "0.10"

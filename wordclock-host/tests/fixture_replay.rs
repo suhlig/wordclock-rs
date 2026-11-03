@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use wordclock::clock;
+use wordclock_core::clock;
 
 #[derive(Debug, Deserialize)]
 struct FixtureEntry {

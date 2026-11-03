@@ -1,0 +1,10 @@
+[package]
+name = "wordclock-esp32"
+version = "0.1.0"
+edition = "2024"
+description = "ESP32-C3 firmware for the word clock"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/suhlig/wordclock-rs"
+
+[dependencies]
+wordclock-core = { path = "../wordclock-core", default-features = false }

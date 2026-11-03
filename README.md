@@ -30,18 +30,18 @@ cargo clippy --all-targets -- -D warnings
 The default build is hardware-free and runs on macOS. The selected ESP32-C3 firmware uses the `riscv32imc-unknown-none-elf` target and `espflash`; it is not part of the default build. The Pi fallback backend is built with `--features hardware`:
 
 ```bash
-cross build --release --target aarch64-unknown-linux-gnu --features hardware
+cross build --release --target aarch64-unknown-linux-gnu -p wordclock-host --features hardware
 ```
 
-The ESP32-C3 firmware currently lives in `spike/esp32c3-ota`; it moves to the `wordclock-esp32` crate in task 4.9.
+The ESP32-C3 firmware crate is `wordclock-esp32`; the working reference implementation remains in `spike/esp32c3-ota` until task 4.10 ports the transport.
 
 ## Simulator
 
 ```bash
-cargo run -- sim "12.11.2017 17:23"
-cargo run -- sim "12.11.2017 17:23" --color ff0000 --seed 42
-cargo run -- sim "2026-01-01T00:30:00" --seed 42
-cargo run -- demo --interval 0.2
+cargo run -p wordclock-host -- sim "12.11.2017 17:23"
+cargo run -p wordclock-host -- sim "12.11.2017 17:23" --color ff0000 --seed 42
+cargo run -p wordclock-host -- sim "2026-01-01T00:30:00" --seed 42
+cargo run -p wordclock-host -- demo --interval 0.2
 ```
 
 ## Validate the plan

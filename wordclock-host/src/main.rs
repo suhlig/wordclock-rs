@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use wordclock::color::Rgb;
-use wordclock::sim::{self, RenderOptions};
+use wordclock_core::color::Rgb;
+use wordclock_host::sim::{self, RenderOptions};
 
 /// Word clock for a 288-pixel WS2812 strip.
 #[derive(Debug, Parser)]
