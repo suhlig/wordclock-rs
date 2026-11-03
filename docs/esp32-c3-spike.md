@@ -131,7 +131,7 @@ The first cycle, with the board booted at ~12:16:46:
 | :--- | :--- | :--- |
 | Link drops | uptime 120 s, ~12:18:47 | status page unreachable from 12:18:59 |
 | Amber, age > 90 s | ~12:19:39 | yes |
-| Dark, age > 180 s | ~12:21:09 | not read back by eye |
+| Dark, age > 180 s | ~12:21:09 | yes |
 | Reconnect and resync | ~12:23:47–12:24:10 | yes, `sync_age_s=5` |
 
 Recovered status at 12:24:10, uptime 443 s:
@@ -147,4 +147,4 @@ clock_unix=1793705050 max_sync_age_s=356 outages=1
 - `clock_unix=1793705050` at 12:24:10 against host `unix=1793705072` at 12:24:32 is the same instant across the 22 s elapsed.
 - `outages=1` for one observed cycle.
 
-The dark phase is the one row not confirmed by eye. The counters show the age passed the 180 s bound, so `paint_clock` took the blank branch, but the strip was not read back between amber and the recovery. This run validates the D20 approach; the production firmware still has to implement task 4.11.
+All four rows are now confirmed by eye: green → amber → dark → green, with the bar advancing throughout. The counters agree, so this run validates the D20 approach; the production firmware still has to implement task 4.11.
