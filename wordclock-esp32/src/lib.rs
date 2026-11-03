@@ -1,9 +1,12 @@
 //! ESP32-C3 firmware for the word clock.
 //!
-//! Task 4.9 creates this crate and shares `wordclock-core`. Task 4.10 adds the
-//! SPI2+DMA strip transport and the firmware loop from `spike/esp32c3-ota`.
+//! Task 4.9 creates this crate and shares `wordclock-core`. The SPI2+DMA
+//! transport is in `display.rs`; the firmware loop is task 6C.
 
 #![no_std]
 #![forbid(unsafe_code)]
+
+#[cfg(target_arch = "riscv32")]
+pub mod display;
 
 pub use wordclock_core::*;
