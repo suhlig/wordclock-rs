@@ -141,11 +141,11 @@ Execute 8B. Section 8A is the Pi fallback and is not executed.
 
 ### 8B. ESP32-C3 (selected)
 
-- [ ] 8B.1 Document Wi-Fi credential provisioning and secrets handling; nothing secret goes into git.
-- [ ] 8B.2 Document the flash and OTA procedure, including checksum verification and the rollback image.
+- [x] 8B.1 `docs/esp32-c3.md` documents the gitignored `wifi.env`, the compiled-in credentials, and why a credential-bearing image is not published.
+- [x] 8B.2 `docs/esp32-c3.md` documents build, first flash, OTA, SHA-256 comparison, and the A/B rollback image.
 - [ ] 8B.3 Provision a blank C3 with one documented procedure and confirm it renders without a debugger attached.
-- [ ] 8B.4 Keep the legacy Pi and Fadecandy clock as the rollback path, and retire it only after the stability window.
-- [ ] 8B.5 Document the OTA rollback and USB reflash procedures.
+- [x] 8B.4 The Pi and Fadecandy clock stay the rollback until the stability window; `docs/esp32-c3.md` states the policy.
+- [x] 8B.5 `docs/esp32-c3.md` documents the OTA rollback and USB reflash procedures.
 
 ## 9. Cutover and validation
 
@@ -164,5 +164,5 @@ Execute 8B. Section 8A is the Pi fallback and is not executed.
 - [x] 10.2 Write the hardware guide with the wiring diagram, BOM, output enablement, test-pattern procedure, and power/ground notes.
 - [ ] 10.3 Link the new repo to the legacy repo and the Fadecandy handoff; state that the legacy repo is the behavioral oracle.
 - [ ] 10.4 Record the verified physical mapping and pixel counts in the hardware guide.
-- [ ] 10.5 Add the ESP32-C3 wiring, SPI setup, and OTA procedure to the hardware guide; keep the Pi path as the non-normative rollback.
+- [x] 10.5 `docs/esp32-c3.md` documents the selected C3 wiring, SPI setup, credentials, flash/OTA, status page, and rollback; the Pi path remains the non-normative fallback in `docs/hardware.md`.
 - [ ] 10.6 Create separate OpenSpec proposals for the deferred Reminders ideas, starting with the highest-value ones: smooth fade, night dimming, web/Prometheus/MQTT observability, and sensors.

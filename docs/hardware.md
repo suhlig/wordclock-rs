@@ -2,7 +2,7 @@
 
 This is the physical build: a 288-pixel WS2812 word clock on a 300-LED strip, driven through a 74AHCT125 level shifter. Fadecandy is not in the signal path.
 
-The ESP32-C3-DevKit-RUST-1 is the selected host (design D16) and drives the strip over SPI2 with DMA, GPIO3 as MOSI. The Raspberry Pi 3B over SPI0 is the rollback path. The level shifter, series resistor, capacitors, common ground, strip, and 5 V supply are common to both; this guide documents the shared wiring and the Pi fallback in detail, and the selected C3 firmware runbook is in `spike/esp32c3-ota/README.md`.
+The ESP32-C3-DevKit-RUST-1 is the selected host (design D16) and drives the strip over SPI2 with DMA, GPIO3 as MOSI. The Raspberry Pi 3B over SPI0 is the rollback path. The level shifter, series resistor, capacitors, common ground, strip, and 5 V supply are common to both; this guide documents the shared wiring and the Pi fallback in detail. The selected C3 build, wiring, credentials, flash/OTA, status page, and rollback are in `docs/esp32-c3.md`.
 
 The guide covers what to buy, how to wire it, how to enable the output, how to prove the build works, and how to roll back. The design rationale lives in `openspec/changes/replace-fadecandy-with-rust/design.md`, decisions D3, D16, D17, and D19; this page is the build instruction.
 

@@ -18,7 +18,7 @@ Start with [HANDOFF.md](HANDOFF.md), then read the proposal, design, specs, and 
 
 The target is a single Rust implementation that drives 288 WS2812 pixels, preserving the legacy clock's visible behavior exactly. The clock core, fixture, and simulator are host-independent. The host is the ESP32-C3-DevKit-RUST-1 over SPI2 with DMA (four SPI bits per LED bit) plus Wi-Fi/SNTP; the Raspberry Pi 3B over SPI0 remains the rollback path. See design decisions D16–D19. The legacy Ruby implementation remains the behavioral oracle until the port is proven.
 
-The physical build is documented in [docs/hardware.md](docs/hardware.md): bill of materials, wiring, output enablement, test patterns, power and grounding, and the rollback procedure. The ESP32-C3 host evaluation and measurement log is in [docs/esp32-c3-spike.md](docs/esp32-c3-spike.md).
+The selected ESP32-C3 build is documented in [docs/esp32-c3.md](docs/esp32-c3.md): wiring, BOM, credentials, flash/OTA, status page, and rollback. The shared hardware notes and the Pi fallback are in [docs/hardware.md](docs/hardware.md). The ESP32-C3 host evaluation and measurement log is in [docs/esp32-c3-spike.md](docs/esp32-c3-spike.md).
 
 ## Develop
 
