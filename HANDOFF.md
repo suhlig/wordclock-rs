@@ -4,6 +4,18 @@ Status: planning complete, crate scaffold and golden fixture in place, clock cor
 
 Progress: tasks 1.1–1.5, 2.1–2.10, 3.1–3.6, 4.1–4.7, 4.8, 4.9, and 4.10 are complete. The ESP32-C3 is the selected host and the workspace is split into `wordclock-core`, `wordclock-host`, and `wordclock-esp32`. The SPI2+DMA strip transport is in `wordclock-esp32/src/display.rs` and was verified on the 335-pixel chain on 2026-11-03 (revision 26: clean boundary pattern, 2.122 A). The on-board WS2812 RMT test was confirmed on GPIO2; the offcut strip now runs on GPIO3 over SPI2 with DMA. Wi-Fi + SNTP is implemented in `spike/esp32c3-wifi` and verified on the board: DHCP, SNTP, the boot gate, and reconnect after a forced disconnect all pass. `spike/esp32c3-frame` compiles the real core and renders the 06:30 frame on the C3; its dump is byte-identical to the host simulator for a fixed color and two seeded scenarios. Task 4.7 is measured: boot to first frame 246 ms, 288-pixel RMT frame 8.1–10.5 ms, OTA image 28.3% of a slot, 54 KiB heap peak, reconnect 5.1 s, and no RMT inter-chunk gap above 0.708 µs in the `frame-loop` capture (Pico analyzer at 24 MHz, all 288 pixels decoded identically to the host). That capture is the no-Wi-Fi control only: at 335 pixels with Wi-Fi active, RMT missed its 30 µs refill deadline and shifted the frame, so the C3 transport is SPI2 with DMA (D19). At the four-bit cell the SPI wire time is about 11.5 ms for 288 pixels and 13.3 ms for 335. Task 4.3 is complete: the 35-pixel offcut runs through the shifter on GPIO3, and the primaries plus the walking pixel prove GRB order and index order. The 5 V side was verified by eye, not measured, so the edge quality at `1Y` is still unmeasured; the timing evidence remains the 4.7 capture at 3.3 V. The working log is `docs/esp32-c3-spike.md`.
 
+## Achieved on 2026-11-03
+
+- Re-validated the RMT→SPI switch: it was made because the C3's 48-code RMT buffer needs CPU refills every 30 µs and Wi-Fi interrupts shift the frame, not because of the WS2811B/WS2812 confusion. The LED-type misunderstanding only affected the later three-bit/four-bit SPI cell debate.
+- Settled the transport record: both hosts encode the same four-bit cell from `wordclock-core/src/strip.rs`; the Pi path is the non-normative rollback.
+- Selected the ESP32-C3 as the host (D16, task 4.8). The Pi 3B is the rollback only.
+- Split the workspace into `wordclock-core` (`no_std` + `alloc`), `wordclock-host`, and `wordclock-esp32` (task 4.9).
+- Ported the production SPI2+DMA transport into `wordclock-esp32/src/display.rs` (task 4.10).
+- Verified D20 on the bench: green → amber → dark → green, `max_sync_age_s=356`, `outages=1`, recovered clock matching the host.
+- Verified the production transport on the 335-pixel chain with Wi-Fi active: revision 26, clean boundary pattern to the last pixel, last pixel off, 2.122 A.
+
+Still open: task 4.11 (D20 in the production firmware), 6C (firmware loop), 7B/8B (release/deployment), the wall-location site survey, and the Fadecandy colour comparison.
+
 This repository is the planned replacement for `github.com/suhlig/wordclock`. It is a public git repository and the current branch is pushed. The legacy repository remains the behavioral oracle and must not be changed except to generate the fixture.
 
 ## Read in this order
