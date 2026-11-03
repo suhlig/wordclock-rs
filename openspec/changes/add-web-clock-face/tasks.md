@@ -70,7 +70,7 @@
 
 - [ ] 7.1 Add a README section for the web face with the device URL, the host preview command, the parity test, and the health metrics, and verify the documented commands run as written.
 - [ ] 7.2 Document the web port, routes, metadata, resource metrics, client limit, memory cost, and LAN-only security posture in `docs/esp32-c3.md`, and verify the guide matches the firmware behavior and the status table.
-- [x] 7.3 Update the deferred observability item in `openspec/changes/replace-fadecandy-with-rust/design.md` to include runtime flash, RAM, and CPU metrics and to point at the `resource-metrics` capability and `docs/metrics.md`.
+- [x] 7.3 Update the deferred observability item in `openspec/changes/archive/2026-11-03-replace-fadecandy-with-rust/design.md` to include runtime flash, RAM, and CPU metrics and to point at the `resource-metrics` capability and `docs/metrics.md`.
 - [ ] 7.4 Run `cargo test`, `cargo clippy --all-targets -- -D warnings`, the firmware target build, `openspec validate add-web-clock-face --strict`, and `openspec status --change add-web-clock-face`, and verify all pass.
 - [ ] 7.5 Verify the rendered page, event stream, and resource metrics against the simulator and the status document on a second machine on the LAN, not only on the development host.
 

@@ -1,6 +1,6 @@
 # ESP32-C3 build guide (selected host)
 
-This is the selected build. The Raspberry Pi 3B path in `docs/hardware.md` is the rollback only. The decision and its evidence are in `openspec/changes/replace-fadecandy-with-rust/design.md` D16, and the measurement log is `docs/esp32-c3-spike.md`.
+This is the selected build. The Raspberry Pi 3B path in `docs/hardware.md` is the rollback only. The decision and its evidence are in the archived `openspec/changes/archive/2026-11-03-replace-fadecandy-with-rust/design.md` (WCR-D16, indexed in `docs/decisions.md`), and the measurement log is `docs/esp32-c3-spike.md`.
 
 > [!WARNING]
 > **One 5 V supply, never two.** The finished clock is powered from a single 5 V supply that feeds the ESP32-C3, the current sensor, and the LED strip. Power enters the board at the pin **labelled `5V` on the silkscreen**, header position 19 in the 28-pin numbering (other boards label the same pin `VIN`). That is a power pin with no GPIO number: do not confuse it with **GPIO19**, which is USB D+ and must never see 5 V.

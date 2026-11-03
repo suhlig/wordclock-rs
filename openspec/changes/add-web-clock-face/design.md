@@ -1,16 +1,16 @@
 # Design
 
-Decision numbers here are local to this change; `replace-fadecandy-with-rust` uses its own D-series.
+Decision numbers here are local to this change; `replace-fadecandy-with-rust` uses its own D-series. `docs/decisions.md` gives both series stable, change-scoped IDs (`WCF-*`, `WCR-*`).
 
 ## Context
 
-The selected host is the ESP32-C3-DevKit-RUST-1 over SPI2 with DMA, Wi-Fi, and SNTP (D16 and D19 in `replace-fadecandy-with-rust`). Its firmware already serves OTA and a plain-text status document on port 3232. That server accepts one connection at a time, owns a single 4 KiB RX/TX buffer pair, and closes each connection after the response, which is the right shape for `curl` and `espflash` but not for a long-lived event stream.
+The selected host is the ESP32-C3-DevKit-RUST-1 over SPI2 with DMA, Wi-Fi, and SNTP (WCR-D16 and WCR-D19 in the archived `replace-fadecandy-with-rust` change). Its firmware already serves OTA and a plain-text status document on port 3232. That server accepts one connection at a time, owns a single 4 KiB RX/TX buffer pair, and closes each connection after the response, which is the right shape for `curl` and `espflash` but not for a long-lived event stream.
 
 `clock_task` renders at 1 Hz from a crystal time base, recomputes the phrase and colours only when the local minute key changes, applies the gamma table, and writes the corrected physical frame. It owns the static `CLOCK_RAW` and `CLOCK_OUT` buffers and blanks the display after `BLANK_AFTER_SECS` without a fresh synchronization. The host simulator already produces the authoritative 18×16 output and corrected colours, and the firmware's frame check is byte-identical to `sim` for a fixed colour and seed.
 
 The canonical front plate is the public `WordClock24h-Frontplatte-800x800.png` from mikrocontroller.net: an 800×800 black square, 16 rows of 18 uppercase letters in a wide-tracked sans-serif, the grid occupying roughly the central 65 % in both axes, and three small dots centred near the bottom.
 
-D21 in `replace-fadecandy-with-rust` fixes the network posture: plaintext HTTP on the LAN, no TLS in the firmware, remote access by VPN. D22 fixes the semantic state that consumers read: the shown minute and colour, not physical pixels. This change inherits both.
+WCR-D21 in the archived `replace-fadecandy-with-rust` change fixes the network posture: plaintext HTTP on the LAN, no TLS in the firmware, remote access by VPN. WCR-D22 fixes the semantic state that consumers read: the shown minute and colour, not physical pixels. This change inherits both.
 
 The constraints that shape the design are the C3's roughly 50 KiB heap headroom after Wi-Fi, `StackResources<4>`, one core, and an OTA path that must remain reachable even when a browser misbehaves.
 
@@ -201,7 +201,7 @@ Why `docs/metrics.md` and not just the page: a dashboard, an alert, and a Home A
 
 ### D15: Keep diagnostics out of the shown-state document
 
-D22 in `replace-fadecandy-with-rust` defines a retained shown-state document for Home Assistant and mirrors: the local minute, the phrase, the colour, the mode, and the dark flag. Runtime resource metrics are not shown state. They go in the separate health payload above, with a separate MQTT document and Prometheus gauges, so a Home Assistant entity does not gain a dozen diagnostic attributes and a mirror does not receive them as part of the clock's appearance.
+WCR-D22 in the archived `replace-fadecandy-with-rust` change defines a retained shown-state document for Home Assistant and mirrors: the local minute, the phrase, the colour, the mode, and the dark flag. Runtime resource metrics are not shown state. They go in the separate health payload above, with a separate MQTT document and Prometheus gauges, so a Home Assistant entity does not gain a dozen diagnostic attributes and a mirror does not receive them as part of the clock's appearance.
 
 The shared `ResourceMetrics` type and the names in `docs/metrics.md` are the single source; the page, the status document, the future MQTT health document, and the future Prometheus endpoint all serialize that type rather than re-deriving the numbers.
 
@@ -267,4 +267,4 @@ This change is additive. The new port and routes appear after an OTA update; the
 - `esp_hal::interrupt::wait_for_interrupt` and `esp_rtos::start_with_idle_hook` for idle accounting.
 - `esp-bootloader-esp-idf`'s image metadata parser for the ESP-IDF header and segment table that this change reimplements in miniature.
 - `docs/esp32-c3-spike.md` for the baseline heap, flash, frame-time, and current measurements.
-- `openspec/changes/replace-fadecandy-with-rust/design.md` D21 and D22 for the network posture and semantic state.
+- `openspec/changes/archive/2026-11-03-replace-fadecandy-with-rust/design.md` WCR-D21 and WCR-D22 for the network posture and semantic state.

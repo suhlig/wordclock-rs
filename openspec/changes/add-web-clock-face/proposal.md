@@ -34,5 +34,5 @@ None. The new capabilities read the existing `clock-rendering`, `color-pipeline`
 - `wordclock-host` gains a `serve` subcommand and a small thread-per-connection HTTP server; no new runtime or web framework.
 - `wordclock-esp32` gains a snapshot publication from `clock_task`, a second HTTP server with a fixed SSE client pool, additional static buffers, and a larger `StackResources`, without touching the OTA path. It also gains the runtime samplers for the app-image length, heap, static RAM, stack high-water, and CPU idle time.
 - Documentation: README, `docs/esp32-c3.md`, a page screenshot, and `docs/metrics.md` with the stable metric contract; the release workflow gains a version identity for the page.
-- No TLS, authentication, external assets, MQTT or Prometheus transport, or command surface; the page is LAN-only, consistent with design D21 of `replace-fadecandy-with-rust`. This change fixes the resource metric contract those later transports will use but does not implement them.
+- No TLS, authentication, external assets, MQTT or Prometheus transport, or command surface; the page is LAN-only, consistent with WCR-D21 of the archived `replace-fadecandy-with-rust` change. This change fixes the resource metric contract those later transports will use but does not implement them.
 - No change to the words, colours, cadence, or physical output.

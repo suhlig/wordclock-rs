@@ -1,6 +1,6 @@
 # Wordclock Rust rewrite — handoff
 
-Status: planning complete, crate scaffold and golden fixture in place, clock core, color pipeline, and simulator complete; host selected. The ESP32-C3-DevKit-RUST-1 is the selected host as of 2026-11-03; the Raspberry Pi 3B is retained only as the rollback path. OpenSpec 1.14.2 validates this change with `openspec validate replace-fadecandy-with-rust --strict`.
+Status: the Fadecandy replacement is implemented and accepted, and its OpenSpec change is archived at `openspec/changes/archive/2026-11-03-replace-fadecandy-with-rust/`. Its six capabilities are now the source of truth under `openspec/specs/`. The ESP32-C3-DevKit-RUST-1 is the selected host as of 2026-11-03; the Raspberry Pi 3B is retained only as the rollback path. OpenSpec 1.15.0 validates the repository with `openspec validate --all --strict`.
 
 Progress: tasks 1.1–1.5, 2.1–2.10, 3.1–3.6, 4.1–4.7, 4.8, 4.9, and 4.10 are complete. The ESP32-C3 is the selected host and the workspace is split into `wordclock-core`, `wordclock-host`, and `wordclock-esp32`. The SPI2+DMA strip transport is in `wordclock-esp32/src/display.rs` and was verified on the 335-pixel chain on 2026-11-03 (revision 26: clean boundary pattern, 2.122 A). The on-board WS2812 RMT test was confirmed on GPIO2; the offcut strip now runs on GPIO3 over SPI2 with DMA. Wi-Fi + SNTP is implemented in `spike/esp32c3-wifi` and verified on the board: DHCP, SNTP, the boot gate, and reconnect after a forced disconnect all pass. `spike/esp32c3-frame` compiles the real core and renders the 06:30 frame on the C3; its dump is byte-identical to the host simulator for a fixed color and two seeded scenarios. Task 4.7 is measured: boot to first frame 246 ms, 288-pixel RMT frame 8.1–10.5 ms, OTA image 28.3% of a slot, 54 KiB heap peak, reconnect 5.1 s, and no RMT inter-chunk gap above 0.708 µs in the `frame-loop` capture (Pico analyzer at 24 MHz, all 288 pixels decoded identically to the host). That capture is the no-Wi-Fi control only: at 335 pixels with Wi-Fi active, RMT missed its 30 µs refill deadline and shifted the frame, so the C3 transport is SPI2 with DMA (D19). At the four-bit cell the SPI wire time is about 11.5 ms for 288 pixels and 13.3 ms for 335. Task 4.3 is complete: the 35-pixel offcut runs through the shifter on GPIO3, and the primaries plus the walking pixel prove GRB order and index order. The 5 V side was verified by eye, not measured, so the edge quality at `1Y` is still unmeasured; the timing evidence remains the 4.7 capture at 3.3 V. The working log is `docs/esp32-c3-spike.md`.
 
@@ -25,12 +25,15 @@ This repository is the planned replacement for `github.com/suhlig/wordclock`. It
 
 ## Read in this order
 
-1. `openspec/changes/replace-fadecandy-with-rust/proposal.md` — why and what.
-2. `openspec/changes/replace-fadecandy-with-rust/design.md` — decisions, the host decision D16–D19, wiring, parity contract, risks.
-3. `openspec/changes/replace-fadecandy-with-rust/tasks.md` — the task list to execute.
-4. `openspec/changes/replace-fadecandy-with-rust/specs/*/spec.md` — the behavior contract for each capability.
+1. `docs/decisions.md` — every decision, with a stable ID, a status, and a link to the rationale.
+2. `openspec/changes/archive/2026-11-03-replace-fadecandy-with-rust/proposal.md` — why and what.
+3. `openspec/changes/archive/2026-11-03-replace-fadecandy-with-rust/design.md` — decisions, the host decision D16–D19, wiring, parity contract, risks.
+4. `openspec/changes/archive/2026-11-03-replace-fadecandy-with-rust/tasks.md` — the task list, including the items still open at archive time.
+5. `openspec/specs/*/spec.md` — the accepted behavior contract for each capability.
+6. `openspec/changes/add-web-clock-face/` and `openspec/changes/add-power-budget-and-current-sensing/` — the planned features, neither implemented.
+7. `openspec/changes/finish-cutover-and-validation/` — the cutover items that were still open when the main change was archived.
 
-Then run `openspec instructions apply --change replace-fadecandy-with-rust` for the working instructions. Work tasks in order and check them off in `tasks.md`.
+For an active change, `openspec instructions apply --change <name>` prints the working instructions; work its tasks in order and check them off in `tasks.md`.
 
 ## Decisions already made
 
@@ -90,6 +93,8 @@ Useful legacy facts:
 
 ## First actions for the implementing agent
 
+Steps 1–7 are complete. Step 8 is complete except recording the physical mapping; step 9 onward is still open.
+
 1. Create the GitHub repository and copy this directory into it. Do not push the legacy repository.
 2. Add the Rust crate and the `hardware` feature split. Confirm `cargo test` passes on macOS without hardware.
 3. Generate and verify the golden fixture before writing the clock renderer.
@@ -113,10 +118,12 @@ Useful legacy facts:
 ## OpenSpec commands
 
 ```bash
-openspec validate replace-fadecandy-with-rust --strict
-openspec status --change replace-fadecandy-with-rust
-openspec instructions apply --change replace-fadecandy-with-rust
+openspec validate --all --strict
+openspec list --specs                                  # implemented capabilities
+openspec list --all                                    # active and archived changes
+openspec status --change add-web-clock-face
+openspec instructions apply --change add-web-clock-face
 openspec view
 ```
 
-After the change is implemented and every task is checked, archive it with `openspec archive replace-fadecandy-with-rust -y`. At that point the six capability specs move into `openspec/specs/` and become the source of truth for future changes.
+The archived change is plain files under `openspec/changes/archive/`; `openspec status` no longer addresses it. Its closure merged the six capability specs into `openspec/specs/`, and its `design.md` keeps the rationale next to the proposal. For future changes, archive with `openspec archive <change> -y` once the required tasks are done; the specs then become the source of truth and the change moves to `changes/archive/YYYY-MM-DD-<change>/`.

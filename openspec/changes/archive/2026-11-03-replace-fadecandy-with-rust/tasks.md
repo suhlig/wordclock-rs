@@ -44,7 +44,8 @@ Run this gate after tasks 2 and 3 and before any hardware provisioning. The core
 - [x] 4.8 Decided 2026-11-03: the ESP32-C3-DevKit-RUST-1 is the selected host. The evidence is in `design.md` D16 and `docs/esp32-c3-spike.md` 4.10. The Pi 3B remains the rollback path only.
 - [x] 4.9 Split the workspace into `wordclock-core` (`no_std` + `alloc`), `wordclock-host` (simulator, CLI, Pi daemon), and `wordclock-esp32` (firmware). The core, fixture, and simulator tests move unchanged; the spike crates stay standalone and include the core by path.
 - [x] 4.10 Port the SPI-with-DMA strip transport from `spike/esp32c3-ota` into the firmware backend and delete the RMT path, as decided in D19. The transport lives in `wordclock-esp32/src/display.rs` and builds for `riscv32imc-unknown-none-elf`. Verified on 2026-11-03 on the 335-pixel chain: revision 26 drove the boundary pattern cleanly with Wi-Fi active, one lit/one dark to the end, the last pixel off, 2.122 A.
-- [ ] 4.11 Implement the start-up and outage behaviour decided in D20: stay dark until the first successful synchronization, never restore an unverified time, keep counting from the crystal-derived timer while the network is away, and blank once the last synchronization is older than the configured bound. Implemented in `clock_task` with a 24 h bound; the AP-off power-cycle and short-outage checks on this image remain.
+- [x] 4.11 Implement the start-up and outage behaviour decided in D20: stay dark until the first successful synchronization, never restore an unverified time, keep counting from the crystal-derived timer while the network is away, and blank once the last synchronization is older than the configured bound. Implemented in `clock_task` with a 24 h bound; verified on the bench as green → amber → dark → green with `max_sync_age_s=356` and `outages=1`.
+- [ ] 4.12 Verify the D20 behaviour on the installed image with the access point switched off across a power cycle, and with a short outage below the 24 h bound; record the observed dark and recovery times.
 
 ## 5. Hardware spike and wiring verification (selected host)
 
@@ -52,23 +53,23 @@ Task 4.8 selected the ESP32-C3: execute 5B only. Section 5A is retained as the r
 
 ### 5A. Raspberry Pi path (non-normative fallback)
 
-Do not execute these tasks unless the ESP32-C3 decision is reopened.
+Do not execute these tasks unless the ESP32-C3 decision is reopened. They are retained as the rollback procedure and are deliberately plain bullets rather than checkboxes, so they do not count toward task progress.
 
-- [ ] 5A.1 Acquire the SN74AHCT125N (DIL-14), a 14-pin IC socket, a 470 Ω resistor, a 47 nF ceramic, a 1000 µF 16 V electrolytic, a 5×7 cm perfboard, Dupont leads and a 1×40 header, a Raspberry Pi Pico H for the sigrok-pico analyzer, and a new 32 GB or larger microSD card, in the single BerryBase order listed in `design.md`.
-- [ ] 5A.2 Flash a new SD card with Raspberry Pi OS Lite 64-bit (trixie); set hostname `wordclock`, user `suhlig`, SSH key, timezone Europe/Berlin, and German keyboard.
-- [ ] 5A.3 Boot the new SD, enable SPI with `dtparam=spi=on`, reboot, and verify `/dev/spidev0.0` and the `spi`, `gpio`, and `i2c` groups.
-- [ ] 5A.4 Wire the level shifter exactly as in `design.md`: GPIO10 to 1A, 1Y through 470 Ω to strip DIN, 1OE to GND, VCC to LED 5 V, common ground, decoupling and bulk capacitors.
-- [ ] 5A.5 Build and run a minimal SPI blink program on the real strip before writing the full daemon; confirm pure red, green, blue, white, and a full-strip wipe.
-- [ ] 5A.6 Implement `wordclock test-pattern` with walking-pixel, row-color, primary-color, and all-on modes; use it to identify the physical order, orientation, and whether the extra 12 LEDs are connected.
-- [ ] 5A.7 Record the verified mapping in the configuration and hardware guide; keep identity as the default only if the test pattern proves it.
-- [ ] 5A.8 Measure frame time at 2.5 MHz and the nearest achievable clock, and confirm the four-bit cell's pulse widths with the sigrok-pico analyzer; keep the clock inside the datasheet window rather than the fastest clock that runs.
-- [ ] 5A.9 If SPI is unreliable, try a lower clock or another SPI mode, then document the fallback to an RP2040/ESP32 controller before considering Pi PWM/DMA.
+- 5A.1 Acquire the SN74AHCT125N (DIL-14), a 14-pin IC socket, a 470 Ω resistor, a 47 nF ceramic, a 1000 µF 16 V electrolytic, a 5×7 cm perfboard, Dupont leads and a 1×40 header, a Raspberry Pi Pico H for the sigrok-pico analyzer, and a new 32 GB or larger microSD card, in the single BerryBase order listed in `design.md`.
+- 5A.2 Flash a new SD card with Raspberry Pi OS Lite 64-bit (trixie); set hostname `wordclock`, user `suhlig`, SSH key, timezone Europe/Berlin, and German keyboard.
+- 5A.3 Boot the new SD, enable SPI with `dtparam=spi=on`, reboot, and verify `/dev/spidev0.0` and the `spi`, `gpio`, and `i2c` groups.
+- 5A.4 Wire the level shifter exactly as in `design.md`: GPIO10 to 1A, 1Y through 470 Ω to strip DIN, 1OE to GND, VCC to LED 5 V, common ground, decoupling and bulk capacitors.
+- 5A.5 Build and run a minimal SPI blink program on the real strip before writing the full daemon; confirm pure red, green, blue, white, and a full-strip wipe.
+- 5A.6 Implement `wordclock test-pattern` with walking-pixel, row-color, primary-color, and all-on modes; use it to identify the physical order, orientation, and whether the extra 12 LEDs are connected.
+- 5A.7 Record the verified mapping in the configuration and hardware guide; keep identity as the default only if the test pattern proves it.
+- 5A.8 Measure frame time at 2.5 MHz and the nearest achievable clock, and confirm the four-bit cell's pulse widths with the sigrok-pico analyzer; keep the clock inside the datasheet window rather than the fastest clock that runs.
+- 5A.9 If SPI is unreliable, try a lower clock or another SPI mode, then document the fallback to an RP2040/ESP32 controller before considering Pi PWM/DMA.
 
 ### 5B. ESP32-C3 path (selected)
 
-- [ ] 5B.1 Audit the BOM for the C3 path: ESP32-C3-DevKit-RUST-1, 74AHCT125, IC socket, 470 Ω, 47 nF, 1000 µF, perfboard, Dupont leads, 5 V supply, and the Pico H analyzer.
-- [ ] 5B.2 Choose a free, non-strapping header GPIO from the board schematic; wire it to 1A, 1Y through 470 Ω to strip DIN, 1OE to GND, VCC to LED 5 V, common ground, decoupling and bulk capacitors.
-- [ ] 5B.3 Flash the SPI-with-DMA test firmware; confirm pure red, green, blue, white, and a full-strip wipe on an offcut strip.
+- [x] 5B.1 Audit the BOM for the C3 path: ESP32-C3-DevKit-RUST-1, 74AHCT125, IC socket, 470 Ω, 47 nF, 1000 µF, perfboard, Dupont leads, 5 V supply, and the Pico H analyzer. Audited; the BOM is in `docs/esp32-c3.md` and `docs/hardware.md`.
+- [x] 5B.2 Choose a free, non-strapping header GPIO from the board schematic; wire it to 1A, 1Y through 470 Ω to strip DIN, 1OE to GND, VCC to LED 5 V, common ground, decoupling and bulk capacitors. GPIO3 (header pin 8) chosen and documented in `docs/esp32-c3.md`; the offcut strip ran through that path.
+- [x] 5B.3 Flash the SPI-with-DMA test firmware; confirm pure red, green, blue, white, and a full-strip wipe on an offcut strip. Verified on the 35-pixel offcut through the shifter on GPIO3 (task 4.3).
 - [ ] 5B.4 Run walking-pixel, row-color, primary-color, and all-on patterns; identify the physical order, orientation, and whether the extra 12 LEDs are connected.
 - [ ] 5B.5 Record the verified mapping in the configuration and hardware guide.
 - [ ] 5B.6 Measure the SPI frame time and bitstream with the Pico analyzer; confirm the four-bit cell, 288 pixels, GRB order, and a gap after a `1` of at least 800 ns.
@@ -85,16 +86,18 @@ Execute 6A and 6C. Section 6B is the Pi fallback and is not executed.
 
 ### 6B. Raspberry Pi daemon (non-normative fallback)
 
-- [ ] 6B.1 Implement the TOML configuration with logical pixels, physical strip length, SPI device and clock, gamma, whitepoint, timezone, birthday list, refresh interval, and NTP gate.
-- [ ] 6B.2 Implement the minute-boundary scheduler, including midnight rollover and daylight-saving transitions.
-- [ ] 6B.3 Implement per-minute uniform color resampling and per-minute per-pixel sampling for occasion modes; never resample on the 1 Hz refresh.
-- [ ] 6B.4 Implement the NTP gate using `timedatectl show -p NTPSynchronized --value`, with an off or neutral frame and a log every 30 seconds while waiting.
-- [ ] 6B.5 Implement the 1 Hz refresh and the retry-on-write-failure behavior.
-- [ ] 6B.6 Implement graceful SIGTERM handling that writes the uniform dim shutdown pattern (raw 32,32,32 across all logical pixels, padding black), logs the stop, and exits successfully.
-- [ ] 6B.7 Implement single-instance protection so a second daemon cannot write the strip.
-- [ ] 6B.8 Add the systemd unit with the user, groups, restart policy, time-sync ordering, `TimeoutStopSec=10`, and hardening flags from `design.md`.
-- [ ] 6B.9 Add structured logging for startup, NTP waits, minute changes, color changes, and output errors; confirm journal visibility.
-- [ ] 6B.10 Add a test that SIGTERM produces exactly one shutdown frame, that it contains no word from the previous minute, that every logical pixel is 32,32,32, and that padding pixels stay black.
+Not executed; retained as the rollback procedure and not counted in task progress.
+
+- 6B.1 Implement the TOML configuration with logical pixels, physical strip length, SPI device and clock, gamma, whitepoint, timezone, birthday list, refresh interval, and NTP gate.
+- 6B.2 Implement the minute-boundary scheduler, including midnight rollover and daylight-saving transitions.
+- 6B.3 Implement per-minute uniform color resampling and per-minute per-pixel sampling for occasion modes; never resample on the 1 Hz refresh.
+- 6B.4 Implement the NTP gate using `timedatectl show -p NTPSynchronized --value`, with an off or neutral frame and a log every 30 seconds while waiting.
+- 6B.5 Implement the 1 Hz refresh and the retry-on-write-failure behavior.
+- 6B.6 Implement graceful SIGTERM handling that writes the uniform dim shutdown pattern (raw 32,32,32 across all logical pixels, padding black), logs the stop, and exits successfully.
+- 6B.7 Implement single-instance protection so a second daemon cannot write the strip.
+- 6B.8 Add the systemd unit with the user, groups, restart policy, time-sync ordering, `TimeoutStopSec=10`, and hardening flags from `design.md`.
+- 6B.9 Add structured logging for startup, NTP waits, minute changes, color changes, and output errors; confirm journal visibility.
+- 6B.10 Add a test that SIGTERM produces exactly one shutdown frame, that it contains no word from the previous minute, that every logical pixel is 32,32,32, and that padding pixels stay black.
 
 ### 6C. ESP32-C3 firmware (selected)
 
@@ -113,18 +116,20 @@ Execute 7B. Section 7A is the Pi fallback and is not executed.
 
 ### 7A. Raspberry Pi (non-normative fallback)
 
-- [ ] 7A.1 Add CI for `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test --all-targets` on default features.
-- [ ] 7A.2 Add an aarch64 `cross build --release --target aarch64-unknown-linux-gnu --features hardware` job and run the resulting binary on the Pi.
-- [ ] 7A.3 Add a tag-triggered release workflow that packages the binary, systemd unit, example config, licenses, and SHA-256.
-- [ ] 7A.4 Add Dependabot for Cargo and GitHub Actions and pin the Rust toolchain.
-- [ ] 7A.5 Verify the release binary starts on the Pi and reports its version without the Ruby, Fadecandy, or OPC stack.
+Not executed; retained as the rollback procedure and not counted in task progress.
+
+- 7A.1 Add CI for `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test --all-targets` on default features.
+- 7A.2 Add an aarch64 `cross build --release --target aarch64-unknown-linux-gnu --features hardware` job and run the resulting binary on the Pi.
+- 7A.3 Add a tag-triggered release workflow that packages the binary, systemd unit, example config, licenses, and SHA-256.
+- 7A.4 Add Dependabot for Cargo and GitHub Actions and pin the Rust toolchain.
+- 7A.5 Verify the release binary starts on the Pi and reports its version without the Ruby, Fadecandy, or OPC stack.
 
 ### 7B. ESP32-C3 (selected)
 
 - [x] 7B.1 `.github/workflows/ci.yml` runs fmt, clippy, and `test --all-targets` on the host and builds the firmware for `riscv32imc-unknown-none-elf`.
 - [x] 7B.2 `.github/workflows/release.yml` builds the image, writes a SHA-256, and attaches both to the release.
 - [x] 7B.3 The release attaches `partitions.csv`; `docs/esp32-c3.md` carries the flashing instructions.
-- [ ] 7B.4 The local revision 29 image is verified; the credential-free release image needs a local rebuild with `wifi.env` to join Wi-Fi.
+- [x] 7B.4 The local revision 29 image is verified; the release image is verified by runtime provisioning instead of a rebuild, because the credential-free image joins Wi-Fi from the stored record (revision 32, task 8B.3).
 - [x] 7B.5 The toolchain is pinned to 1.99.1, the crate versions are pinned in `wordclock-esp32/Cargo.toml`, and Dependabot covers cargo and actions.
 
 ## 8. Deployment and legacy removal (selected host)
@@ -133,11 +138,13 @@ Execute 8B. Section 8A is the Pi fallback and is not executed.
 
 ### 8A. Raspberry Pi (non-normative fallback)
 
-- [ ] 8A.1 Add a `wordclock` Ansible role that installs the pinned release, verifies the checksum, creates the user and groups, installs the config and unit, and enables SPI.
-- [ ] 8A.2 Remove the `fadecandy` role, the `nerab.ruby` role, the `ansistrano` deployment, and the wordclock cron entries from `uhlig-it/infrastructure`.
-- [ ] 8A.3 Provision a freshly flashed 64-bit SD card with one Ansible run and confirm the service is active and the SPI device exists.
-- [ ] 8A.4 Confirm `fcserver` is absent or disabled, no Ruby cron remains, and the host no longer needs Ruby.
-- [ ] 8A.5 Add a rollback section to the infrastructure docs that describes the card swap and Fadecandy reconnection.
+Not executed; retained as the rollback procedure and not counted in task progress.
+
+- 8A.1 Add a `wordclock` Ansible role that installs the pinned release, verifies the checksum, creates the user and groups, installs the config and unit, and enables SPI.
+- 8A.2 Remove the `fadecandy` role, the `nerab.ruby` role, the `ansistrano` deployment, and the wordclock cron entries from `uhlig-it/infrastructure`.
+- 8A.3 Provision a freshly flashed 64-bit SD card with one Ansible run and confirm the service is active and the SPI device exists.
+- 8A.4 Confirm `fcserver` is absent or disabled, no Ruby cron remains, and the host no longer needs Ruby.
+- 8A.5 Add a rollback section to the infrastructure docs that describes the card swap and Fadecandy reconnection.
 
 ### 8B. ESP32-C3 (selected)
 
@@ -162,7 +169,7 @@ Execute 8B. Section 8A is the Pi fallback and is not executed.
 
 - [ ] 10.1 Write the new repo README with build, simulator, configuration, deployment, and troubleshooting instructions.
 - [x] 10.2 Write the hardware guide with the wiring diagram, BOM, output enablement, test-pattern procedure, and power/ground notes.
-- [ ] 10.3 Link the new repo to the legacy repo and the Fadecandy handoff; state that the legacy repo is the behavioral oracle.
+- [x] 10.3 Link the new repo to the legacy repo and the Fadecandy handoff; state that the legacy repo is the behavioral oracle. The README links `github.com/suhlig/wordclock` and names it the behavioral oracle.
 - [ ] 10.4 Record the verified physical mapping and pixel counts in the hardware guide.
 - [x] 10.5 `docs/esp32-c3.md` documents the selected C3 wiring, SPI setup, credentials, flash/OTA, status page, and rollback; the Pi path remains the non-normative fallback in `docs/hardware.md`.
 - [ ] 10.6 Create separate OpenSpec proposals for the deferred Reminders ideas, starting with the highest-value ones: smooth fade, night dimming, web/Prometheus/MQTT observability, and sensors.

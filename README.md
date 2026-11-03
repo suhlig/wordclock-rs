@@ -12,13 +12,27 @@
 
 Rust replacement for the Fadecandy/OPC/Ruby word clock at [github.com/suhlig/wordclock](https://github.com/suhlig/wordclock).
 
-Status: planning complete, crate scaffold and golden fixture in place, clock core, color pipeline, and simulator complete; host selected. The ESP32-C3-DevKit-RUST-1 is the selected host, with the Raspberry Pi 3B retained as the rollback path; the plan is an OpenSpec change under `openspec/changes/replace-fadecandy-with-rust/`.
+Status: the Fadecandy replacement is implemented and accepted. The ESP32-C3-DevKit-RUST-1 is the selected host, with the Raspberry Pi 3B retained as the rollback path. Its OpenSpec change is archived at `openspec/changes/archive/2026-11-03-replace-fadecandy-with-rust/`, and its six capabilities are the current specs under `openspec/specs/`. Three changes are still planned: the web clock face, the power budget, and `finish-cutover-and-validation`, which carries the cutover items that were open at archive time.
 
 Start with [HANDOFF.md](HANDOFF.md), then read the proposal, design, specs, and tasks in that order.
 
-The target is a single Rust implementation that drives 288 WS2812 pixels, preserving the legacy clock's visible behavior exactly. The clock core, fixture, and simulator are host-independent. The host is the ESP32-C3-DevKit-RUST-1 over SPI2 with DMA (four SPI bits per LED bit) plus Wi-Fi/SNTP; the Raspberry Pi 3B over SPI0 remains the rollback path. See design decisions D16–D19. The legacy Ruby implementation remains the behavioral oracle until the port is proven.
+The target is a single Rust implementation that drives 288 WS2812 pixels, preserving the legacy clock's visible behavior exactly. The clock core, fixture, and simulator are host-independent. The host is the ESP32-C3-DevKit-RUST-1 over SPI2 with DMA (four SPI bits per LED bit) plus Wi-Fi/SNTP; the Raspberry Pi 3B over SPI0 remains the rollback path. See `docs/decisions.md` (WCR-D16–WCR-D19). The legacy Ruby implementation remains the behavioral oracle until the port is proven.
 
 The selected ESP32-C3 build is documented in [docs/esp32-c3.md](docs/esp32-c3.md): wiring, BOM, credentials, flash/OTA, status page, and rollback. The shared hardware notes and the Pi fallback are in [docs/hardware.md](docs/hardware.md). The ESP32-C3 host evaluation and measurement log is in [docs/esp32-c3-spike.md](docs/esp32-c3-spike.md).
+
+## Implemented and planned
+
+OpenSpec keeps the two states in separate directories, and reading them as the two halves of the project is the quickest way to see where the clock stands: `openspec/specs/` is what is implemented and accepted, `openspec/changes/` is what is still planned.
+
+```bash
+openspec list --specs      # implemented capabilities and their requirement counts
+openspec list              # active changes, with task progress
+openspec list --all        # active and archived changes
+```
+
+Implemented: `clock-rendering`, `color-pipeline`, `led-output`, `display-simulator`, `clock-daemon`, and `deployment`, all archived with the Fadecandy replacement on 2026-11-03. Planned: `add-web-clock-face` and `add-power-budget-and-current-sensing`, neither of which has code yet, plus `finish-cutover-and-validation` for the bench checks and the cutover that the archived change left open.
+
+Decisions are indexed in [docs/decisions.md](docs/decisions.md) with a stable ID and a status (`accepted`, `accepted (fallback)`, `superseded`, `planned`). Use those IDs, not a bare `D19`: OpenSpec numbers decisions per change, so every change numbers from its own `D1`.
 
 ## Develop
 
@@ -47,10 +61,13 @@ cargo run -p wordclock-host -- demo --interval 0.2
 ## Validate the plan
 
 ```bash
-openspec validate replace-fadecandy-with-rust --strict
-openspec status --change replace-fadecandy-with-rust
-openspec instructions apply --change replace-fadecandy-with-rust
+openspec validate --all --strict
+openspec status --change add-web-clock-face
+openspec status --change add-power-budget-and-current-sensing
+openspec status --change finish-cutover-and-validation
 ```
+
+The archived change is plain files under `openspec/changes/archive/`; `openspec status` no longer addresses it, and its tasks and design are read directly from that directory.
 
 ## Ebook
 

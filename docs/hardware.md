@@ -4,7 +4,7 @@ This is the physical build: a 288-pixel WS2812 word clock on a 300-LED strip, dr
 
 The ESP32-C3-DevKit-RUST-1 is the selected host (design D16) and drives the strip over SPI2 with DMA, GPIO3 as MOSI. The Raspberry Pi 3B over SPI0 is the rollback path. The level shifter, series resistor, capacitors, common ground, strip, and 5 V supply are common to both; this guide documents the shared wiring and the Pi fallback in detail. The selected C3 build, wiring, credentials, flash/OTA, status page, and rollback are in `docs/esp32-c3.md`.
 
-The guide covers what to buy, how to wire it, how to enable the output, how to prove the build works, and how to roll back. The design rationale lives in `openspec/changes/replace-fadecandy-with-rust/design.md`, decisions D3, D16, D17, and D19; this page is the build instruction.
+The guide covers what to buy, how to wire it, how to enable the output, how to prove the build works, and how to roll back. The design rationale lives in the archived `openspec/changes/archive/2026-11-03-replace-fadecandy-with-rust/design.md` (WCR-D3, WCR-D16, WCR-D17, WCR-D19) and is indexed in `docs/decisions.md`; this page is the build instruction.
 
 ## Bill of materials
 

@@ -1,6 +1,6 @@
 # Design
 
-Decision numbers here are local to this change; `replace-fadecandy-with-rust` uses its own D-series.
+Decision numbers here are local to this change; the archived `replace-fadecandy-with-rust` change uses its own D-series. `docs/decisions.md` gives both series stable, change-scoped IDs (`PWR-*`, `WCR-*`).
 
 ## Context
 

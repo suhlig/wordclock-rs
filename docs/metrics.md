@@ -76,7 +76,7 @@ cpu_freq_mhz=160
 uptime_s=3600
 ```
 
-The future MQTT health document carries the same JSON keys and units, retained on its own topic. Topic naming belongs to the MQTT change, and these metrics must not be added to the shown-state document described in design D22 of `replace-fadecandy-with-rust`.
+The future MQTT health document carries the same JSON keys and units, retained on its own topic. Topic naming belongs to the MQTT change, and these metrics must not be added to the shown-state document described by WCR-D22 in `docs/decisions.md`.
 
 The future Prometheus endpoint exposes every name as a gauge with the same unit and a `wordclock_` prefix, for example `wordclock_flash_app_used_bytes`, `wordclock_ram_heap_used_bytes`, and `wordclock_cpu_busy_pct`.
 

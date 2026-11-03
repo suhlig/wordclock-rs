@@ -36,9 +36,22 @@ cover_rel="docs/images/wordclock-front.jpg"
 
 # Every change with a proposal, primary first and the rest alphabetically. The
 # primary leads because the book is named after it and it carries the capability
-# specs the others build on.
+# specs the others build on. The primary is resolved from the active changes
+# first and then from the archive, so archiving it does not silently drop it
+# from the book and leave a stale title.
+change_dir_for() {
+  local slug=$1 dir
+  for dir in "$root/openspec/changes/$slug" "$root"/openspec/changes/archive/*-"$slug"; do
+    if [[ -f $dir/proposal.md ]]; then
+      printf '%s\n' "$dir"
+      return 0
+    fi
+  done
+  return 1
+}
+
 changes=()
-if [[ -f $root/openspec/changes/$primary/proposal.md ]]; then
+if change_dir_for "$primary" >/dev/null; then
   changes+=("$primary")
 fi
 for dir in "$root"/openspec/changes/*/; do
@@ -87,6 +100,7 @@ emit_chapter() {
 }
 
 emit_chapter "Overview" "$root/README.md"
+emit_chapter "Decisions" "$root/docs/decisions.md"
 
 # Append one change: proposal, design, tasks, then its capability specs.
 # `prefix` is empty for the first change, whose chapters keep their plain
@@ -94,7 +108,8 @@ emit_chapter "Overview" "$root/README.md"
 # show two unrelated "Proposal" entries.
 emit_change() {
   local change=$1 prefix=$2
-  local change_dir="$root/openspec/changes/$change"
+  local change_dir
+  change_dir=$(change_dir_for "$change") || return 1
   local doc spec name
   local -a specs=()
 
