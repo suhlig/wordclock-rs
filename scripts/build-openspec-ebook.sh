@@ -13,8 +13,8 @@
 #
 # The book opens with a cover page built from docs/images/wordclock-front.jpg,
 # then the OpenSpec artifacts, then the project documentation (README, hardware
-# guide, ESP32-C3 audit, OTA spike, strip colour fault, handoff) as reference
-# material.
+# guide, ESP32-C3 audit, OTA spike, strip colour fault, metrics contract,
+# handoff) as reference material.
 #
 # Mermaid diagrams are rendered with mermaid-cli, fetched through npx unless
 # `mmdc` is already on PATH.
@@ -129,6 +129,7 @@ emit_chapter "Hardware Guide" "$root/docs/hardware.md"
 emit_chapter "ESP32-C3 Host Spike" "$root/docs/esp32-c3-spike.md"
 emit_chapter "OTA Spike" "$root/spike/esp32c3-ota/README.md"
 emit_chapter "Strip Colour Fault" "$root/docs/strip-colour-fault-handover.md"
+emit_chapter "Runtime Metrics" "$root/docs/metrics.md"
 emit_chapter "Handoff" "$root/HANDOFF.md"
 
 if [[ ${#changes[@]} -eq 1 ]]; then

@@ -372,6 +372,8 @@ Retained rather than a stream, so a consumer that joins late — or HA after a r
 
 The invariant that matters: **rendering never depends on the broker.** Publishing is fire-and-forget; an absent or slow broker must not delay a frame, change a colour or blank the display. If the broker is unreachable the clock keeps clocking and HA shows the entity unavailable. That is the same rule as D21's no-blocking requirement, seen from the other side.
 
+Runtime resource metrics are diagnostics, not shown state. They belong in a separate retained health document and a Prometheus endpoint, using the names and units fixed by the `resource-metrics` capability in `add-web-clock-face` and recorded in `docs/metrics.md`; do not fold them into the shown-state document or expose them as attributes of the clock entity in Home Assistant.
+
 ## Risks / Trade-offs
 
 | Risk | Mitigation |
@@ -419,7 +421,7 @@ The Reminders list "Wordclock" held 56 items on 2026-10-24: 16 open and 40 compl
 
 **Open ideas**
 
-- Observability: a web log of timestamp and color with SSE or WebSocket refresh; Prometheus metrics for current R, G, B, and luminance; MQTT publish of color hex, name, and timestamp; reading luminosity from Prometheus and filtering colors.
+- Observability: a web log of timestamp and color with SSE or WebSocket refresh; Prometheus metrics for current R, G, B, luminance, and the clock's runtime flash, RAM, and CPU usage; MQTT publish of color hex, name, timestamp, and a separate health document with the same resource metrics; reading luminosity from Prometheus and filtering colors. The browser face, the `health` event, and the resource metric names and units are specified separately in `openspec/changes/add-web-clock-face/` (`web-clock-face` and `resource-metrics`, with `docs/metrics.md`); the remaining observability ideas stay open.
 - User-facing behavior: smooth fade between minutes; extending the New Year countdown to birthdays and showing the last ten seconds before midnight as large digits; a Matrix animation; rear demo buttons; animations while nobody is home as a burglary deterrent.
 - Sensors and hardware: current sensor with logging; voltage logging; backplane temperature logging; button wiring for the rear demo buttons.
 - Superseded or obsolete: `clockwork`/`rufus-scheduler` (the daemon owns scheduling).

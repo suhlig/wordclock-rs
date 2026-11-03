@@ -64,7 +64,7 @@ The book opens with a cover built from `docs/images/wordclock-front.jpg`, then r
 
 There is deliberately no option to render a subset. An earlier version accepted a change name, which produced a second file with the same title, subtitle and cover but a different scope — impossible to tell apart on a tablet, and never what anyone wanted.
 
-After the changes come the project documentation as reference material: this README, the hardware guide, the ESP32-C3 host audit, the OTA spike runbook, the strip colour fault handover, and the project handoff.
+After the changes come the project documentation as reference material: this README, the hardware guide, the ESP32-C3 host audit, the OTA spike runbook, the strip colour fault handover, the runtime metrics contract, and the project handoff.
 
 The output keeps the primary change's name, so the paths above stay valid. Mermaid diagrams are rendered with `mermaid-cli`, fetched through `npx` unless `mmdc` is already on `PATH`.
 
