@@ -18,6 +18,10 @@ fn load_env() {
     println!("cargo:rerun-if-changed=wifi.env");
     println!("cargo:rerun-if-changed=../spike/esp32c3-wifi/wifi.env");
     println!("cargo:rerun-if-changed=ota.env");
+    println!("cargo:rerun-if-env-changed=WORDCLOCK_WIFI_SSID");
+    println!("cargo:rerun-if-env-changed=WORDCLOCK_WIFI_PASSWORD");
+    println!("cargo:rerun-if-env-changed=WORDCLOCK_OTA_IP");
+    println!("cargo:rerun-if-env-changed=WORDCLOCK_OTA_GATEWAY");
 
     let credentials = read_env(Path::new("wifi.env"))
         .or_else(|| read_env(Path::new("../spike/esp32c3-wifi/wifi.env")))
@@ -35,7 +39,12 @@ fn load_env() {
 }
 
 fn emit(variable: &str, values: &HashMap<String, String>, key: &str) {
-    let value = values.get(key).map(String::as_str).unwrap_or_default();
+    // An explicit environment variable wins, so a credential-free build can be
+    // produced with `WORDCLOCK_WIFI_SSID= WORDCLOCK_WIFI_PASSWORD= cargo build`.
+    let value = std::env::var(variable)
+        .ok()
+        .or_else(|| values.get(key).cloned())
+        .unwrap_or_default();
     println!("cargo:rustc-env={variable}={value}");
 }
 

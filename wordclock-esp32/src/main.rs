@@ -46,6 +46,7 @@ use esp_hal::rtc_cntl::{Rtc, Rwdt, RwdtStage};
 use esp_hal::time::Duration as HalDuration;
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
+use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
 use esp_hal_smartled::{RmtSmartLeds, buffer_size, color_order};
 use esp_println::println;
 use esp_radio::wifi::{
@@ -58,7 +59,9 @@ use sntpc::{NtpContext, NtpTimestampGenerator, get_time};
 use sntpc_net_embassy::UdpSocketWrapper;
 use static_cell::StaticCell;
 
+use wordclock_esp32::config;
 use wordclock_esp32::display::StripDisplay;
+use wordclock_esp32::provision;
 
 use chrono::{Datelike, Timelike};
 use wordclock_core::timezone;
@@ -92,7 +95,7 @@ macro_rules! mk_static {
 /// phone needs, and this one drives a 35-pixel offcut from the synchronized
 /// clock, drops the link on a timer and blanks past a three-minute bound, so the
 /// outage behaviour is testable without touching the household access point.
-const REVISION: u32 = 29;
+const REVISION: u32 = 32;
 
 const OTA_PORT: u16 = 3232;
 const HEADER_MAX: usize = 1024;
@@ -394,6 +397,10 @@ static CLOCK_PRESENT: AtomicBool = AtomicBool::new(false);
 
 /// `now_secs()` at the last clock-task iteration.
 static CLOCK_HEARTBEAT: AtomicU32 = AtomicU32::new(0);
+
+/// Whether the Wi-Fi credentials came from the flash record rather than a
+/// compile-time default.
+static NVS_CREDENTIALS: AtomicBool = AtomicBool::new(false);
 
 /// Settings for the outage check, in one gate so the feature predicates stay
 /// in one place instead of on every constant.
@@ -708,6 +715,11 @@ fn status_document(
     let _ = writeln!(document, "strip_pixels={}", strip_pixels());
     let _ = writeln!(document, "frame_check={}", cfg!(feature = "frame-check"));
     let _ = writeln!(document, "ip={}", ip_text());
+    let _ = writeln!(
+        document,
+        "nvs_credentials={}",
+        NVS_CREDENTIALS.load(Ordering::Relaxed)
+    );
     let _ = writeln!(
         document,
         "synced={} sync_age_s={} last_sync_unix={}",
@@ -1253,11 +1265,29 @@ async fn main(spawner: Spawner) -> ! {
         }
     );
 
-    if SSID.is_empty() || PASSWORD.is_empty() {
-        panic!("set WORDCLOCK_WIFI_SSID and WORDCLOCK_WIFI_PASSWORD in wifi.env");
-    }
-
     let flash = FLASH.init(FlashStorage::new(peripherals.FLASH));
+
+    // The release image has no credentials. Prefer the stored pair; fall back
+    // to a compile-time `wifi.env` pair and store it; otherwise provision over
+    // USB serial and reboot.
+    let credentials = match config::load(&mut *flash) {
+        Some(credentials) => {
+            NVS_CREDENTIALS.store(true, Ordering::Relaxed);
+            credentials
+        }
+        None if !SSID.is_empty() && !PASSWORD.is_empty() => {
+            let credentials = config::Credentials::new(SSID, PASSWORD)
+                .expect("compile-time credentials are too long");
+            if config::save(&mut *flash, SSID, PASSWORD).is_ok() {
+                info!("stored the compile-time Wi-Fi credentials in flash");
+            }
+            credentials
+        }
+        None => {
+            let usb = UsbSerialJtag::new(peripherals.USB_DEVICE);
+            provision::run(&mut *flash, usb).await;
+        }
+    };
     let partition_buffer = PARTITION_TABLE_BUFFER.init(Aligned([0; PARTITION_TABLE_MAX_LEN]));
 
     // Prepare `otadata` before Wi-Fi starts: the writes are short, and a failure
@@ -1269,9 +1299,17 @@ async fn main(spawner: Spawner) -> ! {
 
     let station_config = WifiConfig::Station(
         StationConfig::default()
-            .with_ssid(SSID.try_into().expect("SSID is too long"))
+            .with_ssid(
+                credentials
+                    .ssid()
+                    .try_into()
+                    .expect("stored SSID is too long"),
+            )
             .with_authentication(AuthenticationMethodConfig::Wpa2Personal(
-                PASSWORD.try_into().expect("password is too long"),
+                credentials
+                    .password()
+                    .try_into()
+                    .expect("stored password is too long"),
             )),
     );
 

@@ -16,8 +16,9 @@ Progress: tasks 1.1–1.5, 2.1–2.10, 3.1–3.6, 4.1–4.7, 4.8, 4.9, and 4.10 
 - Shipped the production firmware in `wordclock-esp32`: revision 29 renders the clock on the 335-pixel bench chain with the D20 gate, 1 Hz refresh, OTA A/B, and an RWDT watchdog that resets the board if the clock task stalls.
 - Wrote `docs/esp32-c3.md`, the selected-host build guide: wiring, credentials, flash/OTA, status page, power-loss behaviour, and rollback.
 - Added `.github/workflows/ci.yml` and `release.yml`: host fmt/clippy/test, the firmware target build, and a tagged release with the image, SHA-256, and partition table. Dependabot covers cargo and actions.
+- Made the release image deployable: Wi-Fi credentials live in a flash record and are provisioned over USB serial on first boot. A credential-free image (revision 32) joined from the stored pair with `nvs_credentials=true`.
 
-Still open: task 4.11's AP-off power-cycle check, network logging (6C.7), the physical mapping (5B.4–5B.6), 7B release CI, 8B.3 blank-C3 provisioning, the wall-location site survey, and the Fadecandy colour comparison.
+Still open: task 4.11's AP-off power-cycle check, network logging (6C.7), the physical mapping (5B.4–5B.6), 8B.3 blank-board serial provisioning, the wall-location site survey, and the Fadecandy colour comparison.
 
 This repository is the planned replacement for `github.com/suhlig/wordclock`. It is a public git repository and the current branch is pushed. The legacy repository remains the behavioral oracle and must not be changed except to generate the fixture.
 

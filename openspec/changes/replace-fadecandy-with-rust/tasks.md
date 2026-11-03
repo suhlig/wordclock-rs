@@ -99,7 +99,7 @@ Execute 6A and 6C. Section 6B is the Pi fallback and is not executed.
 ### 6C. ESP32-C3 firmware (selected)
 
 - [x] 6C.1 Chose `esp-hal` with `esp-rtos`/`embassy`; the toolchain and crate versions are pinned in `wordclock-esp32/Cargo.toml`.
-- [ ] 6C.2 Configuration is compiled in for v1 (strip length, birthdays, Europe/Berlin); NVS/LittleFS remains.
+- [ ] 6C.2 Wi-Fi credentials are stored in a flash record and provisioned over USB serial; strip length, birthdays, Europe/Berlin, and the D20 bound are still compiled in.
 - [x] 6C.3 Wi-Fi association, reconnect, the SNTP startup gate, and 60 s resynchronization are ported from the spike.
 - [x] 6C.4 `clock_task` renders on the minute, refreshes at 1 Hz, keeps the per-minute color cache, and uses `berlin_local_from_utc` for DST.
 - [x] 6C.5 The RWDT watchdog is enabled at 30 s and fed by a task that stops feeding when the clock heartbeat is older than 10 s, so a stalled output task resets the board.
@@ -141,9 +141,9 @@ Execute 8B. Section 8A is the Pi fallback and is not executed.
 
 ### 8B. ESP32-C3 (selected)
 
-- [x] 8B.1 `docs/esp32-c3.md` documents the gitignored `wifi.env`, the compiled-in credentials, and why a credential-bearing image is not published.
+- [x] 8B.1 `docs/esp32-c3.md` documents the flash record, USB serial provisioning, and the gitignored `wifi.env`; the release image is credential-free.
 - [x] 8B.2 `docs/esp32-c3.md` documents build, first flash, OTA, SHA-256 comparison, and the A/B rollback image.
-- [ ] 8B.3 Provision a blank C3 with one documented procedure and confirm it renders without a debugger attached.
+- [ ] 8B.3 The NVS load path is verified (revision 32, credential-free image joined from flash); a blank-board serial provisioning run remains.
 - [x] 8B.4 The Pi and Fadecandy clock stay the rollback until the stability window; `docs/esp32-c3.md` states the policy.
 - [x] 8B.5 `docs/esp32-c3.md` documents the OTA rollback and USB reflash procedures.
 

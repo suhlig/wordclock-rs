@@ -35,4 +35,4 @@ jobs:
           body: |
             ESP32-C3 firmware ${{ github.ref_name }}.
 
-            This image is built without Wi-Fi credentials. Build the device image locally with your gitignored `wifi.env`; see `docs/esp32-c3.md`.
+            This image is built without Wi-Fi credentials. On first boot it prompts for the SSID and password over USB serial, stores them in flash, and reboots into station mode. See `docs/esp32-c3.md`.

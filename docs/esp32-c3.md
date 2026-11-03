@@ -56,14 +56,19 @@ The production firmware is `wordclock-esp32`. The settings are compiled in for v
 
 ## Wi-Fi credentials
 
-Credentials are never committed. The build script reads them from a gitignored `wifi.env` in `wordclock-esp32/`, then from `spike/esp32c3-wifi/wifi.env`:
+Credentials are never committed. On first boot the firmware looks for a stored pair in the flash record at `0x12000`, the free gap between `phy_init` and `ota_0`. If none is present it falls back to a compile-time `wifi.env` pair when the build has one, and otherwise prompts on the USB serial console:
 
-```bash
-WORDCLOCK_WIFI_SSID=...
-WORDCLOCK_WIFI_PASSWORD=...
+```
+wordclock setup
+SSID: ...
+password: ...
 ```
 
-The same file can optionally pin the address with `WORDCLOCK_OTA_IP` and `WORDCLOCK_OTA_GATEWAY`. Because the credentials are compiled into the image, **build the device image locally with your `wifi.env`**; do not publish that image. A credential-free image is only useful as a reference or for runtime provisioning that does not exist yet.
+The pair is stored in flash and the board reboots into station mode. Later OTA images read it from there, so updating the code does not need the credentials. The release image is credential-free and uses exactly this path.
+
+The build script reads a gitignored `wifi.env` in `wordclock-esp32/`, then `spike/esp32c3-wifi/wifi.env`; an explicit `WORDCLOCK_WIFI_SSID` / `WORDCLOCK_WIFI_PASSWORD` environment variable wins. The same file can optionally pin the address with `WORDCLOCK_OTA_IP` and `WORDCLOCK_OTA_GATEWAY`.
+
+A password change later still needs the USB serial console; there is no setup-AP fallback yet. That is a documented limitation.
 
 ## Build and flash
 
@@ -83,6 +88,8 @@ espflash flash --monitor --chip esp32c3 \
   --partition-table wordclock-esp32/partitions.csv \
   target/riscv32imc-unknown-none-elf/release/wordclock-esp32
 ```
+
+The first boot asks for the SSID and password on the USB serial console, stores them in flash, and reboots into station mode. The release image works the same way; it just has no compile-time default.
 
 After that, update over the air. The board serves the update endpoint on port 3232:
 
@@ -105,6 +112,8 @@ The fields that matter:
 | `revision` | Firmware revision |
 | `strip_check` | `on` when the SPI+DMA driver is driving the chain, `failed` otherwise |
 | `strip_pixels` | Physical strip length baked into the image |
+| `ip` | Current address |
+| `nvs_credentials` | `true` when the Wi-Fi pair came from the flash record |
 | `synced`, `sync_age_s` | Whether SNTP has ever answered, and how old the last reply is |
 | `running`, `slot_state` | Active OTA slot and whether it is valid |
 
