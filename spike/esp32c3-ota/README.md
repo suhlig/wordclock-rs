@@ -168,6 +168,8 @@ Revision 20 carried a second cell layout and a `GET /strip?mapping=3bit|4bit` sw
 
 It draws roughly 2 A, scaled from 578 mA measured on the dim variant of the same pattern. For a smaller supply, `BOUNDARY_COLOUR` in `src/bin/main.rs` documents dropping to `0x200801`, which keeps the `0` then `1` ending at about a sixth of the drive.
 
+**Verified on 2026-11-03** on the 335-pixel chain with revision 26: clean one-lit/one-dark to the end, last pixel off, 2.122 A. The build now drives the strip through `wordclock_esp32::display::StripDisplay`, the same transport as the production firmware.
+
 ### Why the strip runs on SPI, not RMT
 
 The C3 gives an RMT channel 48 codes of memory against a frame of 8,042, so the driver has to refill that block from the CPU every 30 µs. In blocking mode the refill happens in a busy-poll loop, and any interrupt that runs past the deadline makes the hardware wrap the block and send it again: the rest of the frame shifts by two pixels per wrap. Measured on a 335-pixel walk, one step's lit pixel appeared about **36 pixels further down the chain** — 18 wraps, roughly 1.1 ms of Wi-Fi interrupt time — and the walk carried on normally afterwards, because only the single lit word made the shift visible.

@@ -148,3 +148,16 @@ clock_unix=1793705050 max_sync_age_s=356 outages=1
 - `outages=1` for one observed cycle.
 
 All four rows are now confirmed by eye: green → amber → dark → green, with the bar advancing throughout. The counters agree, so this run validates the D20 approach; the production firmware still has to implement task 4.11.
+
+## 4.11 Production transport check (task 4.10)
+
+Verified on 2026-11-03 after the workspace split. `spike/esp32c3-ota` was rebuilt against `wordclock_esp32::display::StripDisplay` — the same SPI2+DMA transport the firmware uses — and delivered by OTA as revision 26.
+
+| Measurement | Result |
+| :--- | :--- |
+| Frame | 335 pixels, boundary pattern, one lit / one dark |
+| Wi-Fi | active throughout; no link drop |
+| Readback | clean to the last pixel; no stray after a pixel ending in `1`; last pixel off as the pattern requires |
+| Current | 2.122 A on the full chain |
+
+The spike no longer has its own `SpiDma` + `strip::encode` path: it re-exports `wordclock-core` and drives the strip through the production `StripDisplay`. Task 4.10 is complete. The remaining production work is the firmware loop (6C) and the D20 start-up/outage behaviour (task 4.11).

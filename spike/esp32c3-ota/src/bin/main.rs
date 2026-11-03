@@ -42,10 +42,6 @@ use esp_bootloader_esp_idf::partitions::{
 use esp_hal::clock::CpuClock;
 use esp_hal::rmt::Rmt;
 use esp_hal::rng::Rng;
-#[cfg(feature = "strip-check")]
-use esp_hal::spi::Mode;
-#[cfg(feature = "strip-check")]
-use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDma};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal_smartled::{RmtSmartLeds, buffer_size, color_order};
@@ -59,6 +55,9 @@ use smart_leds::{RGB8, SmartLedsWrite};
 use sntpc::{NtpContext, NtpTimestampGenerator, get_time};
 use sntpc_net_embassy::UdpSocketWrapper;
 use static_cell::StaticCell;
+
+#[cfg(feature = "strip-check")]
+use wordclock_esp32::display::StripDisplay;
 
 #[cfg(feature = "frame-check")]
 use esp32c3_ota::LOGICAL_PIXELS;
@@ -95,7 +94,7 @@ macro_rules! mk_static {
 /// phone needs, and this one drives a 35-pixel offcut from the synchronized
 /// clock, drops the link on a timer and blanks past a three-minute bound, so the
 /// outage behaviour is testable without touching the household access point.
-const REVISION: u32 = 25;
+const REVISION: u32 = 26;
 
 const OTA_PORT: u16 = 3232;
 const HEADER_MAX: usize = 1024;
@@ -278,7 +277,7 @@ const IDENTITY_OFFSET: usize = 1;
 const STRIP_BUFFER_BYTES: usize = strip::buffer_len(STRIP_LENGTH);
 
 #[cfg(feature = "strip-check")]
-type Strip = SpiDma<'static, esp_hal::Blocking>;
+type Strip = StripDisplay<STRIP_BUFFER_BYTES>;
 
 /// Whether the strip driver was created, so the status page can tell a wiring
 /// problem apart from a firmware that does not drive the strip at all.
@@ -293,10 +292,6 @@ static STRIP: StaticCell<Strip> = StaticCell::new();
 #[cfg(feature = "strip-check")]
 static STRIP_FRAME: StaticCell<[Rgb; STRIP_LENGTH]> = StaticCell::new();
 
-/// The encoded bitstream handed to DMA: 4 KiB for 335 pixels at four bits per
-/// LED bit, plus the reset tail.
-#[cfg(feature = "strip-check")]
-static STRIP_BITS: StaticCell<[u8; STRIP_BUFFER_BYTES]> = StaticCell::new();
 
 /// A byte buffer with flash-friendly alignment, so the flash layer never has
 /// to stage a copy through its own sector buffer.
@@ -1201,18 +1196,14 @@ async fn main(spawner: Spawner) -> ! {
     // take the OTA server down with it, because the only way back in is over
     // the air.
     #[cfg(feature = "strip-check")]
-    let strip = match Spi::new(
+    let strip = match StripDisplay::<STRIP_BUFFER_BYTES>::new(
         peripherals.SPI2,
-        SpiConfig::default()
-            .with_frequency(Rate::from_khz(strip::SPI_KHZ))
-            .with_mode(Mode::_0),
+        peripherals.DMA_CH0,
+        peripherals.GPIO3,
     ) {
-        Ok(spi) => {
+        Ok(strip) => {
             STRIP_READY.store(true, Ordering::Relaxed);
-            Some(
-                spi.with_mosi(peripherals.GPIO3)
-                    .with_dma(peripherals.DMA_CH0),
-            )
+            Some(strip)
         }
         Err(error) => {
             error!("strip check unavailable: {error:?}");
@@ -1231,14 +1222,13 @@ async fn main(spawner: Spawner) -> ! {
     if let Some(strip) = strip {
         let strip = STRIP.init(strip);
         let frame = STRIP_FRAME.init([Rgb::BLACK; STRIP_LENGTH]);
-        let bits = STRIP_BITS.init([0u8; STRIP_BUFFER_BYTES]);
 
         for _ in 0..3 {
-            write_frame(strip, frame, bits);
+            write_frame(strip, frame);
             Timer::after(Duration::from_millis(100)).await;
         }
 
-        spawner.spawn(strip_check(strip, frame, bits).expect("failed to spawn the strip check"));
+        spawner.spawn(strip_check(strip, frame).expect("failed to spawn the strip check"));
     }
 
     // The revision blink is the only update indicator when the board runs from
@@ -1423,11 +1413,10 @@ async fn connection(mut controller: WifiController<'static>) {
 async fn hold_clock(
     strip: &'static mut Strip,
     frame: &'static mut [Rgb; STRIP_LENGTH],
-    bits: &'static mut [u8; STRIP_BUFFER_BYTES],
 ) -> ! {
     loop {
         paint_clock(frame);
-        write_frame(strip, frame, bits);
+        write_frame(strip, frame);
         Timer::after(Duration::from_millis(outage::REFRESH_MS)).await;
     }
 }
@@ -1479,11 +1468,10 @@ fn paint_clock(frame: &mut [Rgb; STRIP_LENGTH]) {
 async fn strip_check(
     strip: &'static mut Strip,
     frame: &'static mut [Rgb; STRIP_LENGTH],
-    bits: &'static mut [u8; STRIP_BUFFER_BYTES],
 ) {
     #[cfg(feature = "outage-check")]
     {
-        hold_clock(strip, frame, bits).await;
+        hold_clock(strip, frame).await;
     }
 
     // Everything below runs on the full 335-pixel chain, which is what the
@@ -1491,17 +1479,17 @@ async fn strip_check(
     #[cfg(not(feature = "outage-check"))]
     {
         #[cfg(feature = "boundary-check")]
-        hold_boundary(strip, frame, bits).await;
+        hold_boundary(strip, frame).await;
 
         #[cfg(all(feature = "identity-check", not(feature = "boundary-check")))]
-        hold_identity(strip, frame, bits).await;
+        hold_identity(strip, frame).await;
 
         #[cfg(all(
             feature = "fill-check",
             not(feature = "identity-check"),
             not(feature = "boundary-check")
         ))]
-        hold_fill(strip, frame, bits).await;
+        hold_fill(strip, frame).await;
 
         #[cfg(all(
             feature = "frame-check",
@@ -1509,7 +1497,7 @@ async fn strip_check(
             not(feature = "identity-check"),
             not(feature = "boundary-check")
         ))]
-        hold_fixture(strip, frame, bits).await;
+        hold_fixture(strip, frame).await;
 
         #[cfg(not(any(
             feature = "frame-check",
@@ -1517,7 +1505,7 @@ async fn strip_check(
             feature = "identity-check",
             feature = "boundary-check"
         )))]
-        walk(strip, frame, bits).await;
+        walk(strip, frame).await;
     }
 }
 
@@ -1531,7 +1519,6 @@ async fn strip_check(
 async fn hold_boundary(
     strip: &'static mut Strip,
     frame: &'static mut [Rgb; STRIP_LENGTH],
-    bits: &'static mut [u8; STRIP_BUFFER_BYTES],
 ) -> ! {
     for (index, slot) in frame.iter_mut().enumerate() {
         *slot = if index.is_multiple_of(BOUNDARY_PERIOD) {
@@ -1542,7 +1529,7 @@ async fn hold_boundary(
     }
 
     loop {
-        write_frame(strip, frame, bits);
+        write_frame(strip, frame);
         Timer::after(Duration::from_secs(1)).await;
     }
 }
@@ -1552,7 +1539,6 @@ async fn hold_boundary(
 async fn hold_identity(
     strip: &'static mut Strip,
     frame: &'static mut [Rgb; STRIP_LENGTH],
-    bits: &'static mut [u8; STRIP_BUFFER_BYTES],
 ) -> ! {
     frame.fill(Rgb::BLACK);
     for (offset, colour) in IDENTITY_COLOURS.iter().enumerate() {
@@ -1562,7 +1548,7 @@ async fn hold_identity(
     }
 
     loop {
-        write_frame(strip, frame, bits);
+        write_frame(strip, frame);
         Timer::after(Duration::from_secs(1)).await;
     }
 }
@@ -1580,14 +1566,13 @@ async fn hold_identity(
 async fn hold_fill(
     strip: &'static mut Strip,
     frame: &'static mut [Rgb; STRIP_LENGTH],
-    bits: &'static mut [u8; STRIP_BUFFER_BYTES],
 ) -> ! {
     loop {
         for colour in FILL_COLOURS {
             frame.fill(colour);
 
             for _ in 0..FILL_REFRAMES {
-                write_frame(strip, frame, bits);
+                write_frame(strip, frame);
                 Timer::after(Duration::from_secs(1)).await;
             }
         }
@@ -1605,7 +1590,6 @@ async fn hold_fill(
 async fn hold_fixture(
     strip: &'static mut Strip,
     frame: &'static mut [Rgb; STRIP_LENGTH],
-    bits: &'static mut [u8; STRIP_BUFFER_BYTES],
 ) -> ! {
     let (pixels, _) = render_fixture().expect("the fixture frame must render");
 
@@ -1614,7 +1598,7 @@ async fn hold_fixture(
     }
 
     loop {
-        write_frame(strip, frame, bits);
+        write_frame(strip, frame);
         Timer::after(Duration::from_secs(1)).await;
     }
 }
@@ -1633,7 +1617,6 @@ async fn hold_fixture(
 async fn walk(
     strip: &'static mut Strip,
     frame: &'static mut [Rgb; STRIP_LENGTH],
-    bits: &'static mut [u8; STRIP_BUFFER_BYTES],
 ) -> ! {
     loop {
         for index in 0..STRIP_LENGTH {
@@ -1643,7 +1626,7 @@ async fn walk(
                 walk_pattern::PIXEL
             };
 
-            write_frame(strip, frame, bits);
+            write_frame(strip, frame);
 
             frame[index] = Rgb::BLACK;
             Timer::after(Duration::from_millis(walk_pattern::STEP_MS)).await;
@@ -1653,17 +1636,8 @@ async fn walk(
 
 /// Encodes a frame to the SPI bitstream and hands it to DMA.
 #[cfg(feature = "strip-check")]
-fn write_frame(
-    strip: &mut Strip,
-    frame: &[Rgb; STRIP_LENGTH],
-    bits: &mut [u8; STRIP_BUFFER_BYTES],
-) {
-    let Some(data) = strip::encode(frame, bits) else {
-        error!("the strip buffer cannot hold {STRIP_LENGTH} pixels");
-        return;
-    };
-
-    if let Err(error) = strip.write(data) {
+fn write_frame(strip: &mut Strip, frame: &[Rgb; STRIP_LENGTH]) {
+    if let Err(error) = strip.write(frame) {
         error!("strip write failed: {error:?}");
     }
 }

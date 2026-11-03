@@ -1097,6 +1097,8 @@ dependencies = [
  "sntpc",
  "sntpc-net-embassy",
  "static_cell",
+ "wordclock-core",
+ "wordclock-esp32",
 ]
 
 [[package]]
@@ -2161,6 +2163,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "wordclock-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "computus",
+ "fastrand",
+ "libm",
+]
+
+[[package]]
+name = "wordclock-esp32"
+version = "0.1.0"
+dependencies = [
+ "esp-hal",
+ "wordclock-core",
 ]
 
 [[package]]

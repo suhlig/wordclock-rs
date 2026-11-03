@@ -9,6 +9,8 @@ name = "esp32c3-ota"
 path = "./src/bin/main.rs"
 
 [dependencies]
+wordclock-core = { path = "../../wordclock-core", default-features = false }
+wordclock-esp32 = { path = "../../wordclock-esp32" }
 esp-hal = { version = "~1.2.2", features = ["esp32c3", "log-04", "unstable"] }
 
 esp-rtos = { version = "0.4.0", features = [
