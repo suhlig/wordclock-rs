@@ -44,7 +44,7 @@ Run this gate after tasks 2 and 3 and before any hardware provisioning. The core
 - [x] 4.8 Decided 2026-11-03: the ESP32-C3-DevKit-RUST-1 is the selected host. The evidence is in `design.md` D16 and `docs/esp32-c3-spike.md` 4.10. The Pi 3B remains the rollback path only.
 - [x] 4.9 Split the workspace into `wordclock-core` (`no_std` + `alloc`), `wordclock-host` (simulator, CLI, Pi daemon), and `wordclock-esp32` (firmware). The core, fixture, and simulator tests move unchanged; the spike crates stay standalone and include the core by path.
 - [x] 4.10 Port the SPI-with-DMA strip transport from `spike/esp32c3-ota` into the firmware backend and delete the RMT path, as decided in D19. The transport lives in `wordclock-esp32/src/display.rs` and builds for `riscv32imc-unknown-none-elf`. Verified on 2026-11-03 on the 335-pixel chain: revision 26 drove the boundary pattern cleanly with Wi-Fi active, one lit/one dark to the end, the last pixel off, 2.122 A.
-- [ ] 4.11 Implement the start-up and outage behaviour decided in D20: stay dark until the first successful synchronization, never restore an unverified time, keep counting from the crystal-derived timer while the network is away, and blank once the last synchronization is older than the configured bound. Verify a power cycle with the access point switched off stays dark, and that a short outage keeps the correct minute.
+- [ ] 4.11 Implement the start-up and outage behaviour decided in D20: stay dark until the first successful synchronization, never restore an unverified time, keep counting from the crystal-derived timer while the network is away, and blank once the last synchronization is older than the configured bound. Implemented in `clock_task` with a 24 h bound; the AP-off power-cycle and short-outage checks on this image remain.
 
 ## 5. Hardware spike and wiring verification (selected host)
 
@@ -98,14 +98,14 @@ Execute 6A and 6C. Section 6B is the Pi fallback and is not executed.
 
 ### 6C. ESP32-C3 firmware (selected)
 
-- [ ] 6C.1 Choose `esp-hal` or `esp-idf-svc` from the spike results and pin the toolchain and crate versions.
-- [ ] 6C.2 Implement NVS/LittleFS configuration for strip length, GPIO, timezone, birthday list, refresh interval, and time-source gate; keep Wi-Fi credentials out of the repository.
-- [ ] 6C.3 Implement Wi-Fi provisioning, association, reconnect, the SNTP startup gate, and periodic resynchronization.
-- [ ] 6C.4 Implement minute scheduling, midnight and DST handling, per-minute color cadence, and the 1 Hz refresh with write retry.
-- [ ] 6C.5 Implement the hardware watchdog and output-task restart.
-- [ ] 6C.6 Implement OTA with an A/B partition and rollback, plus a readable firmware version.
-- [ ] 6C.7 Implement serial and network logging, and document the power-loss limitation instead of a shutdown pattern.
-- [ ] 6C.8 Run the fixture replay and daemon state-machine tests on the host; run the on-device smoke test on the C3.
+- [x] 6C.1 Chose `esp-hal` with `esp-rtos`/`embassy`; the toolchain and crate versions are pinned in `wordclock-esp32/Cargo.toml`.
+- [ ] 6C.2 Configuration is compiled in for v1 (strip length, birthdays, Europe/Berlin); NVS/LittleFS remains.
+- [x] 6C.3 Wi-Fi association, reconnect, the SNTP startup gate, and 60 s resynchronization are ported from the spike.
+- [x] 6C.4 `clock_task` renders on the minute, refreshes at 1 Hz, keeps the per-minute color cache, and uses `berlin_local_from_utc` for DST.
+- [ ] 6C.5 The hardware watchdog and output-task restart are not implemented yet.
+- [x] 6C.6 OTA with an A/B partition, rollback, and a readable revision; revision 28 was delivered over the air.
+- [ ] 6C.7 Logging is serial only; network logging and the power-loss note remain.
+- [ ] 6C.8 Host tests pass and the on-device clock smoke test passed at revision 28; daemon state-machine tests remain.
 
 ## 7. Build and release (selected host)
 

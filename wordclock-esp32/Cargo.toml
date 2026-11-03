@@ -6,8 +6,77 @@ description = "ESP32-C3 firmware for the word clock"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/suhlig/wordclock-rs"
 
+[[bin]]
+name = "wordclock-esp32"
+path = "src/main.rs"
+
+[features]
+default = []
+strip-check = []
+frame-check = ["strip-check"]
+fill-check = ["strip-check"]
+dense-check = ["strip-check"]
+identity-check = ["strip-check"]
+boundary-check = ["strip-check"]
+outage-check = ["strip-check"]
+
 [dependencies]
 wordclock-core = { path = "../wordclock-core", default-features = false }
+chrono = { version = "0.4", default-features = false, features = ["alloc"] }
+fastrand = { version = "2", default-features = false, features = ["alloc"] }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-esp-hal = { version = "~1.2.2", features = ["esp32c3", "unstable"] }
+esp-hal = { version = "~1.2.2", features = ["esp32c3", "log-04", "unstable"] }
+esp-rtos = { version = "0.4.0", features = [
+  "embassy",
+  "esp-alloc",
+  "esp-radio",
+  "esp32c3",
+  "log-04",
+] }
+esp-bootloader-esp-idf = { version = "0.6.0", features = ["esp32c3", "log-04"] }
+esp-storage = { version = "0.10.0", default-features = false, features = [
+  "critical-section",
+  "esp32c3",
+] }
+log = "0.4.27"
+embassy-net = { version = "0.9.1", features = [
+  "dhcpv4",
+  "dns",
+  "log",
+  "medium-ethernet",
+  "tcp",
+  "udp",
+] }
+esp-alloc = { version = "0.11.0", features = ["esp32c3", "internal-heap-stats"] }
+esp-backtrace = { version = "0.20.0", features = [
+  "esp32c3",
+  "panic-handler",
+  "println",
+] }
+esp-println = { version = "0.18.0", features = ["esp32c3", "log-04"] }
+embassy-executor = { version = "0.10.0", features = ["log"] }
+embassy-time = { version = "0.5.0", features = ["log"] }
+esp-radio = { version = "1.0.0-beta.1", features = [
+  "esp-alloc",
+  "esp32c3",
+  "log-04",
+  "unstable",
+  "wifi",
+] }
+smoltcp = { version = "0.14.0", default-features = false, features = [
+  "medium-ethernet",
+  "multicast",
+  "proto-dhcpv4",
+  "proto-dns",
+  "proto-ipv4",
+  "socket-dns",
+  "socket-tcp",
+  "socket-udp",
+] }
+sntpc = { version = "0.11", default-features = false }
+sntpc-net-embassy = { version = "0.11", default-features = false }
+critical-section = "1.2.0"
+static_cell = "2.1.1"
+esp-hal-smartled = { version = "0.18.0", features = ["esp32c3"] }
+smart-leds = "0.4.0"

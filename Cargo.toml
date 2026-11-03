@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
 members = ["wordclock-core", "wordclock-host", "wordclock-esp32"]
+# The firmware needs the ESP32-C3 target and esp-hal; keep it out of the
+# default host build and test, but keep it a workspace member.
+default-members = ["wordclock-core", "wordclock-host"]
 # The ESP32-C3 spike crates are standalone: they have their own lockfiles and
 # targets, and they are reference material rather than workspace members.
 exclude = ["spike"]
