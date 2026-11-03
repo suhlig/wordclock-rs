@@ -120,3 +120,31 @@ The single 5 V decision (design D9 of `add-power-budget-and-current-sensing`) re
 ## 4.9 Decision
 
 Pending the measurements above. If the spike is inconclusive, the Pi 3B wins by default.
+
+## 4.10 Outage check (D20)
+
+Ran on 2026-11-03 on the bench with `spike/esp32c3-ota` built `--features outage-check`: revision 25, the 35-pixel offcut, `strip_pixels=35`. The build drops its own Wi-Fi link for 300 s after every 120 s up, so D20 can be observed without taking the household access point down. It was delivered by OTA from revision 24 in 12.0 s (553,280 bytes) and came up as `running=Ota1`.
+
+The first cycle, with the board booted at ~12:16:46:
+
+| Event | Computed | Observed |
+| :--- | :--- | :--- |
+| Link drops | uptime 120 s, ~12:18:47 | status page unreachable from 12:18:59 |
+| Amber, age > 90 s | ~12:19:39 | yes |
+| Dark, age > 180 s | ~12:21:09 | not read back by eye |
+| Reconnect and resync | ~12:23:47–12:24:10 | yes, `sync_age_s=5` |
+
+Recovered status at 12:24:10, uptime 443 s:
+
+```
+revision=25 strip_check=on strip_pixels=35
+synced=true sync_age_s=5 last_sync_unix=1793705045
+clock_unix=1793705050 max_sync_age_s=356 outages=1
+```
+
+- The bar advanced while the link was down, so the display time base is the crystal and not the network.
+- `max_sync_age_s=356` is the gap from the last pre-drop reply to the first post-recovery reply. It exceeds the 300 s down window by up to one 60 s resync interval, which is expected.
+- `clock_unix=1793705050` at 12:24:10 against host `unix=1793705072` at 12:24:32 is the same instant across the 22 s elapsed.
+- `outages=1` for one observed cycle.
+
+The dark phase is the one row not confirmed by eye. The counters show the age passed the 180 s bound, so `paint_clock` took the blank branch, but the strip was not read back between amber and the recovery. This run validates the D20 approach; the production firmware still has to implement task 4.11.

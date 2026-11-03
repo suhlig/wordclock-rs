@@ -232,6 +232,10 @@ Pass means all three of:
 
 Those two counters exist because the status page is unreachable during exactly the window you want to observe. They are the evidence that survives the outage.
 
+### Result
+
+Verified on 2026-11-03 on the bench (revision 25, 35-pixel offcut). The bar advanced while the link was down, amber appeared at the 90 s threshold, and after recovery `clock_unix` matched the host clock and the counters read `max_sync_age_s=356` and `outages=1`. The dark phase was not read back by eye; the counters show the age passed the 180 s bound. The detailed timeline is in `docs/esp32-c3-spike.md` section 4.10.
+
 ### Things that look like faults
 
 - **Booting with no Wi-Fi means permanently dark.** That is D20 behaving correctly, not a wiring failure.
