@@ -5,7 +5,7 @@
 - [x] 1.1 Create the public `github.com/suhlig/wordclock-rs` repository with MIT OR Apache-2.0 licensing, README, `.gitignore`, and a single Rust crate (lib + bin).
 - [x] 1.2 Copy this OpenSpec change into the new repo and commit it before writing code.
 - [x] 1.3 Add `rust-toolchain.toml`, `Cross.toml`, and a `Cargo.toml` with default features that build without hardware.
-- [x] 1.4 Add the `hardware` Cargo feature gating `rppal` and `ws2812-spi`; verify the default build and tests pass on macOS.
+- [x] 1.4 Add the `hardware` Cargo feature gating `rppal`; verify the default build and tests pass on macOS.
 - [x] 1.5 Add a `HANDOFF.md` at the repo root that points to `proposal.md`, `design.md`, `tasks.md`, and the legacy repository.
 
 ## 2. Golden oracle and core port
@@ -59,18 +59,18 @@ Execute only the path selected in task 4.8. Both paths require the 74AHCT125, 47
 - [ ] 5A.5 Build and run a minimal SPI blink program on the real strip before writing the full daemon; confirm pure red, green, blue, white, and a full-strip wipe.
 - [ ] 5A.6 Implement `wordclock test-pattern` with walking-pixel, row-color, primary-color, and all-on modes; use it to identify the physical order, orientation, and whether the extra 12 LEDs are connected.
 - [ ] 5A.7 Record the verified mapping in the configuration and hardware guide; keep identity as the default only if the test pattern proves it.
-- [ ] 5A.8 Measure frame time at 2.4 MHz and 3 MHz and record the result; capture GPIO10 with the sigrok-pico analyzer to record the measured frame time and the 0.4/0.8 µs pulse widths, and keep the fastest reliable clock.
+- [ ] 5A.8 Measure frame time at 2.5 MHz and the nearest achievable clock, and confirm the four-bit cell's pulse widths with the sigrok-pico analyzer; keep the clock inside the datasheet window rather than the fastest clock that runs.
 - [ ] 5A.9 If SPI is unreliable, try a lower clock or another SPI mode, then document the fallback to an RP2040/ESP32 controller before considering Pi PWM/DMA.
 
 ### 5B. ESP32-C3 path
 
 - [ ] 5B.1 Audit the BOM for the C3 path: ESP32-C3-DevKit-RUST-1, 74AHCT125, IC socket, 470 Ω, 47 nF, 1000 µF, perfboard, Dupont leads, 5 V supply, and the Pico H analyzer.
 - [ ] 5B.2 Choose a free, non-strapping header GPIO from the board schematic; wire it to 1A, 1Y through 470 Ω to strip DIN, 1OE to GND, VCC to LED 5 V, common ground, decoupling and bulk capacitors.
-- [ ] 5B.3 Flash the RMT test firmware; confirm pure red, green, blue, white, and a full-strip wipe on an offcut strip.
+- [ ] 5B.3 Flash the SPI-with-DMA test firmware; confirm pure red, green, blue, white, and a full-strip wipe on an offcut strip.
 - [ ] 5B.4 Run walking-pixel, row-color, primary-color, and all-on patterns; identify the physical order, orientation, and whether the extra 12 LEDs are connected.
 - [ ] 5B.5 Record the verified mapping in the configuration and hardware guide.
-- [ ] 5B.6 Measure the RMT frame time and inter-chunk gaps with the Pico analyzer; confirm 288 pixels, GRB order, and margin below the WS2812 reset threshold.
-- [ ] 5B.7 If RMT is unreliable, try another channel or GPIO, then an SPI fallback; document the result before rejecting the C3 path.
+- [ ] 5B.6 Measure the SPI frame time and bitstream with the Pico analyzer; confirm the four-bit cell, 288 pixels, GRB order, and a gap after a `1` of at least 800 ns.
+- [ ] 5B.7 If SPI is unreliable, lower the clock only within the datasheet window or check the shifter and wiring; do not reintroduce RMT for the strip (D19). Document the result before rejecting the C3 path.
 
 ## 6. Daemon or firmware (selected host)
 
@@ -156,5 +156,5 @@ Execute only the path selected in task 4.8. Both paths require the 74AHCT125, 47
 - [x] 10.2 Write the hardware guide with the wiring diagram, BOM, output enablement, test-pattern procedure, and power/ground notes.
 - [ ] 10.3 Link the new repo to the legacy repo and the Fadecandy handoff; state that the legacy repo is the behavioral oracle.
 - [ ] 10.4 Record the verified physical mapping and pixel counts in the hardware guide.
-- [ ] 10.5 After the host decision, add the selected host's wiring, RMT or SPI setup, and OTA or Ansible procedure to the hardware guide; mark the other path as non-normative or remove it.
+- [ ] 10.5 After the host decision, add the selected host's wiring, SPI setup, and OTA or Ansible procedure to the hardware guide; mark the other path as non-normative or remove it.
 - [ ] 10.6 Create separate OpenSpec proposals for the deferred Reminders ideas, starting with the highest-value ones: smooth fade, night dimming, web/Prometheus/MQTT observability, and sensors.

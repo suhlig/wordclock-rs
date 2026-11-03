@@ -98,7 +98,7 @@ The legacy Pi and Fadecandy clock SHALL remain available until the selected host
 - **THEN** the operator removes the Fadecandy board and USB cable from the signal path, and the selected host's wiring remains the only data path
 
 ### Requirement: Hardware guide
-The repository SHALL document the selected host's wiring, bill of materials, output enablement, test-pattern procedure, power and grounding, and rollback. Until the host decision is recorded, it SHALL document both the Pi SPI and ESP32-C3 RMT paths.
+The repository SHALL document the selected host's wiring, bill of materials, output enablement, test-pattern procedure, power and grounding, and rollback. Until the host decision is recorded, it SHALL document both the Pi SPI and ESP32-C3 SPI-with-DMA paths.
 
 #### Scenario: New builder
 - **WHEN** a builder follows the guide from a bare host and strip

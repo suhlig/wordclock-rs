@@ -667,12 +667,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
 
 [[package]]
-name = "rgb"
-version = "0.8.53"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47b34b781b31e5d73e9fbc8689c70551fd1ade9a19e3e28cfec8580a79290cc4"
-
-[[package]]
 name = "rppal"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -845,15 +839,6 @@ name = "smallvec"
 version = "1.16.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0d5d4b1981b8bbbb7aed204cae5726d683d5d6ac7e74ec54122ea28f315e7c8"
-
-[[package]]
-name = "smart-leds-trait"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7f4441a131924d58da6b83a7ad765c460e64630cce504376c3a87a2558c487f"
-dependencies = [
- "rgb",
-]
 
 [[package]]
 name = "spin_sleep"
@@ -1237,23 +1222,11 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "smart-leds-trait",
  "tempfile",
  "thiserror",
  "toml",
  "tracing",
  "tracing-subscriber",
- "ws2812-spi",
-]
-
-[[package]]
-name = "ws2812-spi"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2fd98e2b649252eced2ec3aa8d5048e7d2ac294276b0567939bbf47741f9934"
-dependencies = [
- "embedded-hal 1.0.0",
- "smart-leds-trait",
 ]
 
 [[package]]

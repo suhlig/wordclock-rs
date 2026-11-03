@@ -12,7 +12,7 @@ readme = "README.md"
 # modules also compile without it, which is what the ESP32-C3 firmware needs.
 default = ["std"]
 std = []
-hardware = ["dep:rppal", "dep:smart-leds-trait", "dep:ws2812-spi"]
+hardware = ["dep:rppal"]
 
 [dependencies]
 anyhow = "1"
@@ -28,8 +28,6 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 rppal = { version = "0.22", features = ["hal"], optional = true }
-smart-leds-trait = { version = "0.3", optional = true }
-ws2812-spi = { version = "0.5", features = ["std"], optional = true }
 
 [dev-dependencies]
 assert_cmd = "2"

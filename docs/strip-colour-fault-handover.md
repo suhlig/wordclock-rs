@@ -9,7 +9,7 @@ Observed on 2026-11-01 on the bench chain at revision 20: `GET /strip?mapping=3b
 Two conclusions here were wrong and are worth keeping as corrections:
 
 - The strip is a WS2812B for the whole life of the project, so the waveform at 2.5 MHz was never outside the published window. "Three SPI bits is illegal for this part" was an inference from a misread of `HANDOFF.md`, not a fact.
-- `ws2812-spi` would not have fixed it. Its cell for a `1` is `1110`, so its gap after a `1` is also exactly one SPI bit — 312 ns at its usual 3.2 MHz, which is shorter than the 400 ns that fails here. The handover's step 2 is withdrawn.
+- `ws2812-spi` would not have fixed it. Its cell for a `1` is `1110`, so its gap after a `1` is also exactly one SPI bit — 312 ns at its usual 3.2 MHz, which is shorter than the 400 ns that fails here. The `ws2812-spi` recommendation in *If starting over* is withdrawn.
 
 ## Summary
 
@@ -132,7 +132,7 @@ The pattern across the whole session: tests were designed around what was conven
 
 1. Read back the intended frame. One command, and it rules out half the system.
 2. Immediately run a static readback containing a colour whose last LED bit is `1` next to one whose last bit is `0`, plus three independent primaries. That is the identity test, and it finds the rule in one flash.
-3. Drive the strip with `ws2812-spi`, which the project already depends on, rather than a hand-rolled encoder. Do not reproduce the bit patterns from memory.
+3. Drive the strip with the four-bit cell in `src/strip.rs`, not a hand-rolled pattern and not `ws2812-spi`'s `1110` cell. Do not reproduce the bit patterns from memory.
 
 ## Reasoning errors made in this session (do not repeat)
 

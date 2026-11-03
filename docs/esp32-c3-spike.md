@@ -11,7 +11,7 @@ The clock, color, and frame code must move into a `no_std` + `alloc` core crate 
 | `clock` | Yes (`Vec`, `String`) | None | Pure, fixture-tested |
 | `color` | Yes (`Vec`, static table) | None after the `libm` change | `chrono::NaiveDate`/`Datelike` need the `alloc` feature only; `fastrand::Rng::with_seed` and `computus` are `no_std`; `libm` provides `pow` and `round`; the seedless `ColorPicker::new(None, ...)` arm is behind the `std` feature because `Rng::new` does not exist without it |
 | `frame` | Yes (`Vec`) | None | Pure |
-| `display` | Yes | `std::io` in the terminal backend | Host-only; the firmware supplies an RMT `Display` |
+| `display` | Yes | `std::io` in the terminal backend | Host-only; the firmware supplies an SPI `Display` |
 | `sim` | Yes | `chrono::Local`, `std::io`, `std::thread` | Host-only |
 | `config`, `daemon` | Later | Host-specific | Section 6 of the plan |
 
@@ -75,23 +75,25 @@ Offcut through the level shifter (2026-10-31):
 
 ## 4.7 Measurements
 
-Measured on 2026-10-25 with the combined gate firmware (`spike/esp32c3-wifi`): Wi-Fi, DHCP, SNTP, the real core and `Europe/Berlin` rule, and a 288-pixel RMT frame, with an OTA partition table for the size measurement.
+Measured on 2026-10-25 with the combined gate firmware (`spike/esp32c3-wifi`): Wi-Fi, DHCP, SNTP, the real core and `Europe/Berlin` rule, and a 288-pixel RMT frame, with an OTA partition table for the size measurement. The frame timing was captured with `frame-loop`, which skips Wi-Fi, so the RMT rows below are the no-Wi-Fi control.
 
 | Measurement | Result |
 | :--- | :--- |
 | Boot to first frame | 245.9 ms from chip reset to the completed neutral write (236.8 ms bootloader plus HAL init, 8.1 ms frame write) |
 | Boot to first SNTP response | 2.30 s when the AP has no stale session for this MAC; 11.29 s and 11.33 s after an abrupt reset while still associated |
 | Boot to first clock frame | 2.39 s clean, 11.42 s with a stale session |
-| Full 288-pixel frame time | 8.10–8.18 ms for the clock frame; 8.15 ms all-zero; 10.45 ms all-white |
-| RMT inter-chunk gap | None measurable: the longest low inside a frame is 0.708 µs (the normal zero bit) in two captures covering 9,697 and 10,335 bits at 24 MHz; far below the 50 µs WS2812 reset |
+| Full 288-pixel RMT frame time (no-Wi-Fi control) | 8.10–8.18 ms for the clock frame; 8.15 ms all-zero; 10.45 ms all-white |
+| Full 288-pixel SPI frame time (four-bit cell, 2.5 MHz) | 11.5 ms wire time, derived from 12 bytes/pixel |
+| Full 335-pixel SPI frame time (four-bit cell, 2.5 MHz) | 13.3 ms wire time, derived |
+| RMT inter-chunk gap (no-Wi-Fi control) | None measurable: the longest low inside a frame is 0.708 µs (the normal zero bit) in two captures covering 9,697 and 10,335 bits at 24 MHz; far below the 50 µs WS2812 reset |
 | Flash use with timezone + OTA partitions | 556,496 of 1,966,080 bytes (28.30%) in one OTA slot; 1,409,584 bytes free |
 | Flash use with the default single-app layout | 556,496 of 4,128,768 bytes (13.48%) |
-| RAM use | Heap 103,184 bytes: 1,728 used after boot, 50,308 after Wi-Fi, 54,432 peak (52.8%); plus a 27,656-byte static RMT buffer |
+| RAM use | Heap 103,184 bytes: 1,728 used after boot, 50,308 after Wi-Fi, 54,432 peak (52.8%); plus a 27,656-byte static RMT buffer, which the SPI build replaces with about 4 KiB |
 | Wi-Fi reconnect time | 5.10 s and 5.07 s after a forced disconnect, of which 5 s is the deliberate backoff; association itself is about 0.1 s |
 
 The consistent 2.30 s versus 11.3 s difference is the DHCP lease reacquisition after an abrupt reset: the access point still holds the previous association for the same MAC. A power loss looks like that case, so plan for up to about 12 s of neutral frame after boot rather than the clean 2.4 s.
 
-The software `write()` time includes the 80 µs reset, buffer conversion, and channel hand-over, so it overstates the line time. The analyzer capture is authoritative: one frame carries 7.311 ms of bitstream and no low interval above 0.708 µs. The setup was the Pico H with `sigrok-pico` and the `raspberrypi-pico` driver, clipped directly to GPIO2 (3.3 V, so no level shifter was needed), one channel at 24 MHz, 380,000 samples. The `frame-loop` feature streams the 06:30 frame back-to-back for the capture, and `rgb_led_ws281x` decoded all 288 pixels identically to `examples/dump_frame.rs` for the same time and seed.
+The software `write()` time includes the 80 µs reset, buffer conversion, and channel hand-over, so it overstates the line time. The analyzer capture is authoritative: one frame carries 7.311 ms of bitstream and no low interval above 0.708 µs. The setup was the Pico H with `sigrok-pico` and the `raspberrypi-pico` driver, clipped directly to GPIO2 (3.3 V, so no level shifter was needed), one channel at 24 MHz, 380,000 samples. The `frame-loop` feature streams the 06:30 frame back-to-back for the capture, and `rgb_led_ws281x` decoded all 288 pixels identically to `examples/dump_frame.rs` for the same time and seed. That capture is the no-Wi-Fi control: `frame-loop` skips Wi-Fi, and the same RMT transport failed at 335 pixels with Wi-Fi active (4.8 and D19).
 
 ## 4.8 OTA update path
 

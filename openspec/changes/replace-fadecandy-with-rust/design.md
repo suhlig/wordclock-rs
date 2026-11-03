@@ -28,7 +28,7 @@ The network is a private LAN with no inbound exposure: a local MQTT broker feder
 
 - Preserve the current visible output exactly: the same words, the same pixel indices, the same color cadence, and the same gamma-corrected colors.
 - Keep the clock core, color pipeline, and simulator independent of the host and its output transport, so the same fixture-tested logic runs on either candidate.
-- Select exactly one host on measured evidence: the Raspberry Pi 3B with 64-bit Raspberry Pi OS Lite and SPI0, or the ESP32-C3-DevKit-RUST-1 with RMT and Wi-Fi/SNTP.
+- Select exactly one host on measured evidence: the Raspberry Pi 3B with 64-bit Raspberry Pi OS Lite and SPI0, or the ESP32-C3-DevKit-RUST-1 with SPI2 and DMA plus Wi-Fi/SNTP.
 - Make an orderly stop unmistakable on the strip on hosts that support an orderly stop, so an outdated minute is never read as the current time.
 - Keep the simulator as a first-class, hardware-free development and test surface.
 - Make deployment reproducible for the selected host and keep a tested rollback to the current SD card and Fadecandy board, which are temporary: the board leaves the signal path once the rollback window closes and is not part of the target hardware.
@@ -50,15 +50,15 @@ The network is a private LAN with no inbound exposure: a local MQTT broker feder
 
 The rewrite lives in `github.com/suhlig/wordclock-rs`, created public and dual-licensed MIT OR Apache-2.0. `github.com/suhlig/wordclock` stays untouched as the legacy reference and the source of the golden fixture. This keeps the migration oracle stable and avoids a mixed Ruby/Rust tree during the cutover.
 
-Rust was chosen over Go and Ruby because the LED and Raspberry Pi crates are maintained (`rppal`, `ws2812-spi`), the binary is dependency-free at runtime, the core logic is pure and easy to test, and the user is comfortable with Rust. Ruby remains the behavioral oracle, not the target runtime.
+Rust was chosen over Go and Ruby because the LED and Raspberry Pi crates are maintained (`rppal`), the binary is dependency-free at runtime, the core logic is pure and easy to test, and the user is comfortable with Rust. Ruby remains the behavioral oracle, not the target runtime.
 
 ### D2: Treat the Pi 3B as the incumbent host candidate
 
-The Pi 3B is sufficient: the clock logic is trivial, the SPI write is about 9 ms per frame, and the 1 GiB of RAM is ample. The 32-bit constraint disappears with `fcserver`. If the Pi is selected, reflash a new SD card with Raspberry Pi OS Lite 64-bit (trixie), keep the old card untouched, and treat the Pi hardware as stable until it shows a fault. A Pi Zero 2 W would also work but is not needed; a Pi 4 or Pi 5 adds power, heat, and cost without a benefit for 288 pixels. The ESP32-C3 alternative is evaluated in D16.
+The Pi 3B is sufficient: the clock logic is trivial, the SPI write is about 11.5 ms per frame, and the 1 GiB of RAM is ample. The 32-bit constraint disappears with `fcserver`. If the Pi is selected, reflash a new SD card with Raspberry Pi OS Lite 64-bit (trixie), keep the old card untouched, and treat the Pi hardware as stable until it shows a fault. A Pi Zero 2 W would also work but is not needed; a Pi 4 or Pi 5 adds power, heat, and cost without a benefit for 288 pixels. The ESP32-C3 alternative is evaluated in D16.
 
 ### D3: Drive the strip from SPI0 with an external level shifter on the Pi
 
-This section describes the Pi path. The ESP32-C3 path uses RMT and is described in D17; both paths share the level shifter, series resistor, and grounding rules.
+This section describes the Pi path. The ESP32-C3 path uses SPI2 with DMA and is described in D17; both paths share the level shifter, series resistor, and grounding rules.
 
 Fadecandy currently provides both the USB interface and the 5 V level shifting (SN74HCT245 on the Fadecandy board). The replacement uses the Pi's SPI0 MOSI on GPIO10 (physical pin 19), an SN74AHCT125N in DIL-14 powered from the LED 5 V supply, a 470 Ω series resistor at the first LED, and a common ground between the Pi, the level shifter, and the LED supply.
 
@@ -143,9 +143,9 @@ flowchart TD
     Frame --> Correction[Gamma and whitepoint LUT]
     Correction --> Display{Display backend}
     Display -->|Pi| Spi[SPI0 /dev/spidev0.0]
-    Display -->|ESP32-C3| Rmt[RMT channel]
+    Display -->|ESP32-C3| Spi2[SPI2 with DMA, GPIO3]
     Spi --> Level[74AHCT125 level shifter]
-    Rmt --> Level
+    Spi2 --> Level
     Level --> Strip[WS2812 strip]
     Display -->|dev| Terminal[Terminal simulator]
     Display -->|demo| Demo[Demo loop]
@@ -156,7 +156,7 @@ Proposed module layout:
 - `clock`: the 288-character stripe, word tables, `pixels`, `words`, and the exact legacy lookup. No host or transport dependency.
 - `color`: `Rgb`, `NamedColor`, the 922-entry XKCD table, occasion rules, and the gamma/whitepoint LUT. No host dependency.
 - `frame`: `Frame` with logical and physical pixel counts. No host dependency.
-- `display`: a `Display` trait, a terminal backend, a null backend for tests, and one hardware backend per selected host: SPI on the Pi, RMT on the ESP32-C3.
+- `display`: a `Display` trait, a terminal backend, a null backend for tests, and one hardware backend per selected host: SPI on the Pi, SPI with DMA on the ESP32-C3.
 - `daemon`: scheduler, time gate, signal handling, and logging on the Pi; the firmware loop on the ESP32-C3.
 - `config`: TOML loading on the Pi, NVS/LittleFS or build-time defaults on the ESP32-C3.
 - `main`: `clap` subcommands for `run`, `sim`, `demo`, `test-pattern`, and `--version` on the host; a firmware entry point on the ESP32-C3.
@@ -167,8 +167,8 @@ The simulator and core tests build on macOS without any hardware feature. Until 
 
 Use the maintained, small crates that fit the job:
 
-- Host: `rppal` 0.22 with the `hal` feature for Pi SPI, GPIO, and future I2C; `ws2812-spi` 0.5 with the `std` feature, using its hosted variant and the GRB color order; `smart-leds-trait` for the RGB write trait.
-- ESP32-C3: `esp-hal` with an RMT WS2812 driver (`esp-hal-smartled` or equivalent), `esp-wifi` for Wi-Fi, `esp-backtrace` and `esp-println` for diagnostics, and `espflash` for flashing. `esp-idf-svc` is the std alternative if OTA, SNTP, and logging convenience outweigh the larger binary.
+- Host: `rppal` 0.22 with the `hal` feature for Pi SPI, GPIO, and future I2C. The Pi backend encodes with `strip::encode` and writes the pre-encoded buffer over SPI0; it does not use `ws2812-spi`, whose `1110` cell for a `1` leaves a 312–333 ns gap, shorter than the 400 ns that produced the stray pixel on the C3.
+- ESP32-C3: `esp-hal` with SPI2 and DMA for the strip, whose four-bit cell lives in `src/strip.rs`; `esp-hal-smartled` over RMT only for the one-pixel on-board status LED, which fits the 48-symbol buffer. Also `esp-wifi` for Wi-Fi, `esp-backtrace` and `esp-println` for diagnostics, and `espflash` for flashing. `esp-idf-svc` is the std alternative if OTA, SNTP, and logging convenience outweigh the larger binary.
 - `chrono` and `chrono-tz` for local time and DST tests; `computus` 2 for Easter dates. `chrono-tz` stays on the host; the ESP32-C3 uses a filtered timezone database or a fixed `Europe/Berlin` offset with the EU DST rule to conserve flash.
 - Host only: `clap` 4, `tokio` 1, `tracing`, `tracing-subscriber`, `serde`, `toml`, `thiserror`, and `anyhow`. The core modules must not depend on these.
 - `rand` or `fastrand` for XKCD sampling, with an injectable RNG for deterministic tests.
@@ -178,9 +178,9 @@ No `axum`, `rumqttc`, `prometheus`, or sensor crates in this change. They are fu
 
 ### D7: SPI output details on the Pi
 
-Enable SPI with `dtparam=spi=on` in `/boot/firmware/config.txt`, reboot, and verify `/dev/spidev0.0`. Open SPI0, slave select 0, SPI mode 0, at 3 MHz (the `ws2812-spi` accepted range is 2–3.8 MHz). At 3 MHz a 288-pixel frame takes about 9.2 ms; at 2.4 MHz it takes about 11.5 ms. Build with `--release`; timing-sensitive bit generation must not be left at debug optimization. Write the full physical strip length, padding beyond 288 with black. The `ws2812-spi` crate emits GRB order and appends reset bytes.
+Enable SPI with `dtparam=spi=on` in `/boot/firmware/config.txt`, reboot, and verify `/dev/spidev0.0`. Open SPI0, slave select 0, SPI mode 0, at 2.5 MHz (or the nearest clock the SPI divider produces; verify the bit period with the analyzer). Encode the frame with `strip::encode` — the same four-bit cell the ESP32-C3 uses, `0` as `1000` and `1` as `1100` — and write the returned buffer in one transfer. Do not use `ws2812-spi`'s encoder: its `1` cell is `1110`, which leaves a 312–333 ns gap after a `1`, shorter than the 400 ns that produced the stray pixel on the C3, and no clock that keeps `T1H` inside its window can widen it. The four-bit cell puts `T0H` at 400 ns, `T1H` at 800 ns, `T0L` at 1200 ns and `T1L` at 800 ns, and appends a 448 µs reset. At 2.5 MHz a 288-pixel frame takes about 11.5 ms including the reset. Build with `--release`; timing-sensitive bit generation must not be left at debug optimization. Write the full physical strip length, padding beyond 288 with black.
 
-If the first LED shows wrong colors while the rest are correct, suspect the data voltage or the level shifter, not the software. If pixels are intermittently wrong, suspect gaps between SPI transfers or a too-slow clock; a logic analyzer is the right tool. If SPI proves unreliable on this Pi, the fallback order is: lower the SPI clock, try the other SPI mode, then use a dedicated RP2040/ESP32 LED controller over serial/network, and only then consider Pi PWM/DMA.
+If the first LED shows wrong colors while the rest are correct, suspect the data voltage or the level shifter, not the software. If pixels are intermittently wrong, first confirm the clock is inside the four-bit cell's datasheet window (about 2.2–3.1 MHz) and that the frame is written in one transfer, then suspect the shifter or wiring; a logic analyzer on the data pin is the right tool. The fallback order is: adjust the clock within that window, try the other SPI mode, then use a dedicated RP2040/ESP32 LED controller over serial/network, and only then consider Pi PWM/DMA.
 
 ### D8: Preserve the color pipeline, not necessarily Fadecandy's dithering
 
@@ -279,7 +279,7 @@ The comparison is recorded in this design and in `tasks.md`. The working audit, 
 | Storage | SD card | typically 4 MiB flash, no SD |
 | Network | Wi-Fi only here: the wall has one cable and it carries 5 V, no Ethernet drop | 2.4 GHz Wi-Fi only |
 | Time source | ntpsec/systemd-timesyncd | SNTP over Wi-Fi |
-| LED transport | SPI0, 2.4–3 MHz | SPI2 with DMA, 2.5 MHz (D19) |
+| LED transport | SPI0, 2.5 MHz, four-bit cell | SPI2 with DMA, 2.5 MHz, four-bit cell |
 | Runtime | Linux + systemd | bare-metal `esp-hal` or `esp-idf-svc` |
 | Deployment | Ansible + systemd | USB flash or OTA |
 | Updates | apt + Ansible | OTA with rollback partition |
@@ -293,13 +293,17 @@ Measured on 2026-10-25 with the combined gate firmware (real core plus the `Euro
 | :--- | :--- |
 | Boot to first (neutral) frame | 246 ms |
 | Boot to first SNTP / clock frame | 2.3 s clean; 11.3 s after an abrupt reset with a stale access-point session |
-| Full 288-pixel frame | 8.1–8.2 ms typical, 10.5 ms worst case (all white) |
-| RMT inter-chunk gap | None measurable: the longest low inside a frame is 0.708 µs at 24 MHz resolution, far below the 50 µs WS2812 reset |
+| Full 288-pixel RMT frame (no-Wi-Fi control) | 8.1–8.2 ms typical, 10.5 ms worst case (all white) |
+| Full 288-pixel SPI frame (four-bit cell, 2.5 MHz) | 11.5 ms wire time, derived from 12 bytes/pixel |
+| Full 335-pixel SPI frame (four-bit cell, 2.5 MHz) | 13.3 ms wire time, derived |
+| RMT inter-chunk gap (no-Wi-Fi control) | None measurable: the longest low inside a frame is 0.708 µs at 24 MHz resolution, far below the 50 µs WS2812 reset |
+| RMT under Wi-Fi, 335 pixels | Failed: ~36-pixel shift from 18 buffer wraps, ~1.1 ms of interrupt time (D19) |
+| SPI with DMA under Wi-Fi, 335 pixels | No glitches observed on a full walk |
 | Flash with timezone + OTA | 556,496 of 1,966,080 bytes (28.3%) in one OTA slot |
-| RAM | 54,432-byte heap peak of 103,184, plus a 27,656-byte static RMT buffer |
+| RAM | 54,432-byte heap peak of 103,184, plus a 27,656-byte static RMT buffer; the SPI build replaces that buffer with about 4 KiB |
 | Wi-Fi reconnect | 5.1 s including the 5 s backoff; association itself about 0.1 s |
 
-The RMT timing question was closed on 2026-10-25 and has since been reopened and settled the other way. That capture ran with `frame-loop`, which skips Wi-Fi, and the strip it drove was 288 pixels; at 335 pixels with Wi-Fi running, RMT produced a few corrupted frames per sweep (D19). The transport is now SPI with DMA, which measured clean. What remains outstanding for the host gate is the full 300-pixel frame on the real chain, the Fadecandy colour comparison, and a decision on start-up behaviour without a network (task 4.11). Note also that the wall installation has a single 5 V cable and no Ethernet drop, so the Pi's wired-network advantage does not exist here.
+The RMT timing question was closed on 2026-10-25 and has since been reopened and settled the other way. That capture ran with `frame-loop`, which skips Wi-Fi, and the strip it drove was 288 pixels; it is the no-Wi-Fi control, not a production result. At 335 pixels with Wi-Fi running, RMT produced a few corrupted frames per sweep (D19). The transport is now SPI with DMA, which measured clean on a full 335-pixel walk; at the four-bit cell the wire time is about 11.5 ms for 288 pixels and 13.3 ms for 335, both trivial at a 1 Hz refresh. What remains outstanding for the host gate is the full 300-pixel frame on the real chain, the Fadecandy colour comparison, and a decision on start-up behaviour without a network (task 4.11). Note also that the wall installation has a single 5 V cable and no Ethernet drop, so the Pi's wired-network advantage does not exist here.
 
 One criterion came off the list before the spike finished. A TLS stack and a certificate store were the constraints most likely to disqualify the C3, and D21 records that the control plane is plain MQTT on the LAN behind a Tailscale VPN, so neither has to fit. What remains a real constraint is RAM for concurrent connections and the discipline of never blocking, not the protocol.
 
@@ -372,8 +376,8 @@ The invariant that matters: **rendering never depends on the broker.** Publishin
 | :--- | :--- |
 | Physical wiring is not identity or is serpentine | Run the walking-pixel and row test patterns before writing the clock frame; add a mapping if needed. |
 | 3.3 V data is marginal or the first LED misbehaves | Use the 74AHCT125/74HCT245 level shifter, short data lead, common ground, 470 Ω series resistor, and bulk capacitance on both host paths. |
-| SPI timing gaps cause random pixels | Use the hosted/pre-rendered path, build with `--release`, test at 3 MHz, and verify with a logic analyzer; fall back to a lower clock or an RP2040/ESP32 controller. |
-| RMT chunk gaps reset the strip mid-frame | Measure the gap with the Pico analyzer, use a streaming/chunked RMT driver, and keep the largest gap far below the WS2812 reset threshold; if it cannot be met, reject the C3 path. |
+| SPI timing gaps cause random pixels | Use the four-bit cell in `src/strip.rs` at 2.5 MHz, which puts both pulses at nominal and keeps the gap after a `1` at 800 ns; never tune the clock by hand. Verify with a logic analyzer and a static identity readback. |
+| RMT refill deadline is missed under Wi-Fi | Realized on 2026-11-01: the CPU must refill RMT every 30 µs, and Wi-Fi interrupts shift the frame. Resolved by SPI2 with DMA (D19); keep RMT only for the one-pixel status LED. |
 | ESP32-C3 Wi-Fi is weak or unavailable at the clock | Use 2.4 GHz coverage at the final location, test association and SNTP after a network loss, and keep the Pi/Ethernet path as the fallback if the site is marginal. |
 | ESP32-C3 flash is too small for the timezone data and OTA slots | Restrict timezone data to `Europe/Berlin`, measure the release image, and reject the C3 path if the OTA partition cannot hold it with headroom. |
 | TLS or a certificate store does not fit the C3 | Not required: the control plane is plain MQTT on the LAN and remote access is Tailscale's job (D21). If the broker ever moves off the LAN, put a TLS-capable element in front of the clock or change host; do not add TLS to the firmware. |
@@ -402,8 +406,8 @@ The invariant that matters: **rendering never depends on the broker.** Publishin
 - Fadecandy hardware: `pcb/fc64x8/fc64x8.sch` confirms the SN74HCT245 level shifter.
 - Fadecandy handoff: `doc/fadecandy-replacement-handoff.markdown` in the legacy repository.
 - Infrastructure: `uhlig-it/infrastructure/playbooks/machines/wordclock.yml`, `roles/wordclock/launch.yml`, `roles/fadecandy/`.
-- Crates: `rppal` 0.22.1, `ws2812-spi` 0.5.1, `computus` 2.0.0.
-- ESP32-C3 toolchain and crates: `esp-hal`, `esp-hal-smartled`, `esp-wifi`, `espflash`, and the Espressif ESP32-C3 RMT documentation. The std alternative is `esp-idf-svc`.
+- Crates: `rppal` 0.22.1, `computus` 2.0.0.
+- ESP32-C3 toolchain and crates: `esp-hal`, `esp-hal-smartled`, `esp-wifi`, `espflash`, and the Espressif ESP32-C3 SPI/DMA and RMT documentation. The std alternative is `esp-idf-svc`.
 - ESP32-C3 board: ESP32-C3-DevKit-RUST-1, with the on-board USB Serial/JTAG for flashing and diagnostics.
 - Current live system: Pi 3B Rev 1.2, Raspbian 13 trixie 32-bit, kernel 6.18.39+rpt-rpi-v7, Ruby 4.0.1, no Rust or Go, 920 MiB RAM, 64 GB SD, 52 GB free, `fcserver` active, cron every minute, SPI disabled, NTP synchronized via ntpsec.
 

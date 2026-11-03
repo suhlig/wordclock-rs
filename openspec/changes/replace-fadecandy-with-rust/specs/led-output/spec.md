@@ -7,15 +7,19 @@ Delivers a complete color frame to the physical WS2812/WS2812B strip over the se
 ## ADDED Requirements
 
 ### Requirement: Host output transport
-The system SHALL drive the strip through the selected host's supported transport: SPI0 on the Raspberry Pi and SPI with DMA on the ESP32-C3. Both transports SHALL emit the same WS2812/WS2812B waveform, pixel order, and green-red-blue color order.
+The system SHALL drive the strip through the selected host's supported transport: SPI0 on the Raspberry Pi and SPI2 with DMA on the ESP32-C3. Both transports SHALL encode the same waveform from the four-bit cell defined in `src/strip.rs` — `0` as `1000` and `1` as `1100` at 2.5 MHz — and SHALL use the same pixel order and green-red-blue color order. The Pi SHALL NOT use a third-party encoder whose cell leaves a shorter gap after a `1` than the four-bit cell.
 
 #### Scenario: Pi SPI output
 - **WHEN** a frame is written on the Pi
-- **THEN** it is transmitted over SPI0 to `/dev/spidev0.0` with the configured clock
+- **THEN** it is encoded with `strip::encode` and transmitted over SPI0 to `/dev/spidev0.0` as one pre-encoded buffer at 2.5 MHz
 
 #### Scenario: ESP32-C3 SPI output
 - **WHEN** a frame is written on the ESP32-C3
-- **THEN** it is transmitted over SPI2 with DMA and GPIO3 as MOSI, at the encoded WS2812 bit timing
+- **THEN** it is encoded with the same `strip::encode` and transmitted over SPI2 with DMA and GPIO3 as MOSI
+
+#### Scenario: Pixel boundary after a 1
+- **WHEN** either host transmits a pixel whose last LED bit is `1` immediately followed by a pixel whose first LED bit is `0`
+- **THEN** the low time between them is at least 800 ns and the second pixel shows only its own value
 
 ### Requirement: Transport independent of CPU scheduling
 On the ESP32-C3 the frame SHALL be transmitted without the CPU having to service the transport at a bounded interval, so that radio interrupts cannot corrupt the bitstream.

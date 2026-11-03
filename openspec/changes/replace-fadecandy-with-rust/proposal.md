@@ -8,7 +8,7 @@ The word clock has been stable for almost ten years, but its software chain is n
 
 - Replace `fcserver`, Open Pixel Control, and the `faderuby` client with an in-process Rust implementation that writes the 288-pixel frame directly to the WS2812 strip.
 - Keep the clock renderer, color table, occasion rules, and gamma 2.5 correction independent of the host and its output transport, so the same fixture-tested logic runs on either candidate.
-- Evaluate two hosts and select exactly one after a measured spike: the existing Raspberry Pi 3B with 64-bit Raspberry Pi OS Lite and SPI0, or an ESP32-C3 (ESP32-C3-DevKit-RUST-1) with the RMT peripheral and Wi-Fi/SNTP.
+- Evaluate two hosts and select exactly one after a measured spike: the existing Raspberry Pi 3B with 64-bit Raspberry Pi OS Lite and SPI0, or an ESP32-C3 (ESP32-C3-DevKit-RUST-1) with SPI2 and DMA plus Wi-Fi/SNTP.
 - Keep a hardware-free terminal simulator and demo loop so clock logic can be developed and tested without a Pi, an ESP32-C3, or LEDs.
 - Replace the per-minute cron job with a long-running service on the selected host: a systemd daemon on the Pi, or a firmware loop with a watchdog and Wi-Fi reconnect on the ESP32-C3.
 - Preserve the uniform dim shutdown pattern as the final frame on an orderly Pi stop. The ESP32-C3 cannot guarantee this on power loss; that limitation is documented and the post-boot NTP gate is retained.
@@ -19,7 +19,7 @@ The word clock has been stable for almost ten years, but its software chain is n
 
 ## Host Decision
 
-The host is not assumed. The clock core and simulator are built first; then a time-boxed ESP32-C3 spike measures RMT output reliability, boot-to-first-frame time, Wi-Fi/SNTP behavior, flash and RAM use, and OTA/deployment effort. The Pi 3B path is measured against the same criteria. The selected host is recorded in `design.md` and only that host's hardware, daemon, release, and deployment tasks are executed.
+The host is not assumed. The clock core and simulator are built first; then a time-boxed ESP32-C3 spike measures output reliability, boot-to-first-frame time, Wi-Fi/SNTP behavior, flash and RAM use, and OTA/deployment effort. The Pi 3B path is measured against the same criteria. The selected host is recorded in `design.md` and only that host's hardware, daemon, release, and deployment tasks are executed.
 
 ## Capabilities
 
@@ -27,7 +27,7 @@ The host is not assumed. The clock core and simulator are built first; then a ti
 
 - `clock-rendering`: turns local time into the exact 18×16 German word pattern, including the current phrasing quirks and pixel indices, independently of the host and output transport.
 - `color-pipeline`: selects the uniform or per-pixel color for the current time, applies the current occasion rules, and applies gamma 2.5/whitepoint correction.
-- `led-output`: writes a complete RGB frame to the WS2812 strip over the selected host's transport (SPI0 on the Pi, RMT on the ESP32-C3), including physical pixel count, padding, and refresh behavior.
+- `led-output`: writes a complete RGB frame to the WS2812 strip over the selected host's transport (SPI0 on the Pi, SPI2 with DMA on the ESP32-C3), including physical pixel count, padding, and refresh behavior.
 - `display-simulator`: renders the same frame to a terminal and runs the demo loop without hardware.
 - `clock-daemon`: runs continuously on the selected host, schedules minute updates, gates startup on time synchronization, logs, writes the shutdown pattern where an orderly stop exists, and shuts down or restarts cleanly.
 - `deployment`: builds and publishes the selected target's artifact and provisions either a 64-bit Pi with SPI and systemd or an ESP32-C3 with firmware, Wi-Fi credentials, and OTA.
