@@ -2,21 +2,21 @@
 
 ## Purpose
 
-Builds, publishes, and installs the clock for the selected host — a 64-bit Raspberry Pi or an ESP32-C3 — reproducibly, with a tested rollback and no remaining Fadecandy or Ruby dependency.
+Builds, publishes, and installs the clock for the selected host — the ESP32-C3 — reproducibly, with the Raspberry Pi 3B as the rollback and no remaining Fadecandy or Ruby dependency.
 
 ## ADDED Requirements
 
 ### Requirement: Target selection
-The implementation SHALL select exactly one runtime host before hardware provisioning — the Raspberry Pi 3B or the ESP32-C3 — and SHALL record the measured evidence for the choice.
+The implementation SHALL use the ESP32-C3 as the runtime host, selected on 2026-11-03 and recorded with its evidence in design D16, and SHALL retain the Raspberry Pi 3B only as the rollback path.
 
 #### Scenario: Host recorded
 - **WHEN** the target spike finishes
-- **THEN** the selected host and its evidence are recorded in the design, and only that host's provisioning path is executed
+- **THEN** the selected host and its evidence are recorded in the design, and only the ESP32-C3 provisioning path is executed
 
 ### Requirement: Target release artifact
 Every tagged release SHALL publish the artifact for the selected host and its checksum.
 
-#### Scenario: Pi release
+#### Scenario: Pi release (fallback)
 - **WHEN** the selected host is the Raspberry Pi and a release tag is pushed
 - **THEN** the release contains a runnable aarch64 Linux binary, the systemd unit, an example configuration, and their checksums
 
@@ -27,7 +27,7 @@ Every tagged release SHALL publish the artifact for the selected host and its ch
 ### Requirement: One-run provisioning
 A fresh host SHALL be provisioned by one documented, repeatable procedure.
 
-#### Scenario: Blank Pi SD to running clock
+#### Scenario: Blank Pi SD to running clock (fallback)
 - **WHEN** Ansible runs against a freshly flashed 64-bit Pi SD card
 - **THEN** the SPI device exists, the `wordclock` service is active, and the clock renders without manual steps
 
@@ -58,14 +58,14 @@ The deployment SHALL install a pinned release and verify the published checksum 
 - **THEN** the update is rejected and the running firmware remains active
 
 ### Requirement: Shutdown stop budget on the Pi
-When the selected host is the Raspberry Pi, the systemd unit SHALL keep the default shutdown dependencies and SHALL set a stop timeout of at least 10 seconds, so the daemon can write the shutdown pattern and exit before an orderly halt, poweroff, or reboot removes power.
+When the Pi fallback is used, the systemd unit SHALL keep the default shutdown dependencies and SHALL set a stop timeout of at least 10 seconds, so the daemon can write the shutdown pattern and exit before an orderly halt, poweroff, or reboot removes power.
 
 #### Scenario: Orderly Pi poweroff
 - **WHEN** the operator runs `systemctl poweroff` or `systemctl reboot` on the Pi
 - **THEN** the unit is stopped with SIGTERM, the shutdown pattern is visible, and the daemon is not killed by SIGKILL
 
 ### Requirement: Non-root service on the Pi
-When the selected host is the Raspberry Pi, the daemon SHALL run as a dedicated non-root `wordclock` user with access to the SPI, GPIO, and I2C device groups.
+When the Pi fallback is used, the daemon SHALL run as a dedicated non-root `wordclock` user with access to the SPI, GPIO, and I2C device groups.
 
 #### Scenario: Pi service identity
 - **WHEN** the service is running on the Pi
@@ -98,7 +98,7 @@ The legacy Pi and Fadecandy clock SHALL remain available until the selected host
 - **THEN** the operator removes the Fadecandy board and USB cable from the signal path, and the selected host's wiring remains the only data path
 
 ### Requirement: Hardware guide
-The repository SHALL document the selected host's wiring, bill of materials, output enablement, test-pattern procedure, power and grounding, and rollback. Until the host decision is recorded, it SHALL document both the Pi SPI and ESP32-C3 SPI-with-DMA paths.
+The repository SHALL document the selected ESP32-C3 SPI-with-DMA path and SHALL keep the Pi SPI path as the non-normative rollback.
 
 #### Scenario: New builder
 - **WHEN** a builder follows the guide from a bare host and strip

@@ -1,6 +1,6 @@
 # Wordclock Rust rewrite — handoff
 
-Status: planning complete, crate scaffold and golden fixture in place, clock core, color pipeline, and simulator complete; host decision gate next. The host is deliberately undecided: the Raspberry Pi 3B and the ESP32-C3-DevKit-RUST-1 are both candidates, and a measured spike after the core and simulator selects one. OpenSpec 1.14.2 validates this change with `openspec validate replace-fadecandy-with-rust --strict`.
+Status: planning complete, crate scaffold and golden fixture in place, clock core, color pipeline, and simulator complete; host selected. The ESP32-C3-DevKit-RUST-1 is the selected host as of 2026-11-03; the Raspberry Pi 3B is retained only as the rollback path. OpenSpec 1.14.2 validates this change with `openspec validate replace-fadecandy-with-rust --strict`.
 
 Progress: tasks 1.1–1.5, 2.1–2.10, 3.1–3.6, and 4.1–4.7 are complete. The on-board WS2812 RMT test was confirmed on GPIO2; the offcut strip now runs on GPIO3 over SPI2 with DMA. Wi-Fi + SNTP is implemented in `spike/esp32c3-wifi` and verified on the board: DHCP, SNTP, the boot gate, and reconnect after a forced disconnect all pass. `spike/esp32c3-frame` compiles the real core and renders the 06:30 frame on the C3; its dump is byte-identical to the host simulator for a fixed color and two seeded scenarios. Task 4.7 is measured: boot to first frame 246 ms, 288-pixel RMT frame 8.1–10.5 ms, OTA image 28.3% of a slot, 54 KiB heap peak, reconnect 5.1 s, and no RMT inter-chunk gap above 0.708 µs in the `frame-loop` capture (Pico analyzer at 24 MHz, all 288 pixels decoded identically to the host). That capture is the no-Wi-Fi control only: at 335 pixels with Wi-Fi active, RMT missed its 30 µs refill deadline and shifted the frame, so the C3 transport is SPI2 with DMA (D19). At the four-bit cell the SPI wire time is about 11.5 ms for 288 pixels and 13.3 ms for 335. Task 4.3 is complete: the 35-pixel offcut runs through the shifter on GPIO3, and the primaries plus the walking pixel prove GRB order and index order. The 5 V side was verified by eye, not measured, so the edge quality at `1Y` is still unmeasured; the timing evidence remains the 4.7 capture at 3.3 V. The working log is `docs/esp32-c3-spike.md`.
 
@@ -9,7 +9,7 @@ This repository is the planned replacement for `github.com/suhlig/wordclock`. It
 ## Read in this order
 
 1. `openspec/changes/replace-fadecandy-with-rust/proposal.md` — why and what.
-2. `openspec/changes/replace-fadecandy-with-rust/design.md` — decisions, host options D16–D18, wiring, parity contract, risks.
+2. `openspec/changes/replace-fadecandy-with-rust/design.md` — decisions, the host decision D16–D19, wiring, parity contract, risks.
 3. `openspec/changes/replace-fadecandy-with-rust/tasks.md` — the task list to execute.
 4. `openspec/changes/replace-fadecandy-with-rust/specs/*/spec.md` — the behavior contract for each capability.
 
@@ -21,22 +21,22 @@ Then run `openspec instructions apply --change replace-fadecandy-with-rust` for 
 | :--- | :--- |
 | Language | Rust rewrite, phased. Ruby stays only as the legacy oracle. |
 | Repository | New public `github.com/suhlig/wordclock-rs`, MIT OR Apache-2.0. Legacy repo unchanged. |
-| Hardware | Host decision deferred: Raspberry Pi 3B with 64-bit Raspberry Pi OS Lite, or ESP32-C3-DevKit-RUST-1. A measured spike after the core and simulator selects one; the other path is not maintained. |
-| LED output | Pi: SPI0 GPIO10 at 2.5 MHz, four SPI bits per LED bit. ESP32-C3: SPI2 with DMA, GPIO3 as MOSI, 2.5 MHz with four SPI bits per LED bit. Both use the 74AHCT125 or 74HCT245 level shifter, a 470 Ω series resistor, and common ground. |
-| Runtime | Pi: long-running systemd daemon. ESP32-C3: firmware loop with watchdog, Wi-Fi reconnect, SNTP gate, and OTA. |
-| v1 scope | Parity only, plus an explicit dim shutdown pattern on orderly Pi stops: same words, colors, gamma, cadence, 24/7. No other new user-facing features. |
+| Hardware | ESP32-C3-DevKit-RUST-1, selected 2026-11-03. The Raspberry Pi 3B is the rollback path only and is not maintained. |
+| LED output | ESP32-C3 (selected): SPI2 with DMA, GPIO3 as MOSI, 2.5 MHz with four SPI bits per LED bit. Pi (fallback): SPI0 GPIO10 at 2.5 MHz, same four-bit cell. Both use the 74AHCT125 or 74HCT245 level shifter, a 470 Ω series resistor, and common ground. |
+| Runtime | ESP32-C3 (selected): firmware loop with watchdog, Wi-Fi reconnect, SNTP gate, and OTA. Pi (fallback): long-running systemd daemon. |
+| v1 scope | Parity only: same words, colors, gamma, cadence, 24/7. No other new user-facing features. The dim shutdown pattern applies only to the Pi fallback; the ESP32-C3 cannot do it on power loss. |
 | Simulator | Terminal snapshot, fixed color/seed override, and full-day demo loop. No web UI in v1. |
 | Wording | Preserve the current hybrid phrasing and quirks exactly. Fix them only in a later change. |
 | Colors | New random color each minute on regular days; per-pixel on carnival, birthdays, and New Year party; grey on Ash Wednesday and New Year hangover. |
 | Gamma | Fadecandy curve with gamma 2.5, whitepoint 1,1,1, linearCutoff 0. Dithering only if visual comparison requires it. |
-| NTP | Do not show time after boot until the host's time source reports synchronized: `timedatectl` on the Pi, SNTP on the ESP32-C3. |
-| Shutdown | On an orderly Pi stop, write a uniform dim fill (raw 32,32,32) across all logical pixels as the final frame. The ESP32-C3 cannot do this on power loss; document the limitation and keep the neutral boot gate. |
-| Build | GitHub Actions builds the selected target: cross-compiled aarch64 plus Ansible for the Pi, or an `espflash` image plus OTA metadata for the C3. |
+| NTP | Do not show time after boot until the time source reports synchronized: SNTP on the selected ESP32-C3, `timedatectl` on the Pi fallback. |
+| Shutdown | Pi fallback only: on an orderly stop, write a uniform dim fill (raw 32,32,32) across all logical pixels as the final frame. The selected ESP32-C3 cannot do this on power loss; document the limitation and keep the neutral boot gate. |
+| Build | GitHub Actions builds the selected target: an `espflash` image plus OTA metadata for the ESP32-C3. The Pi aarch64/Ansible path is fallback only. |
 | Rollback | Pi: card swap plus Fadecandy reconnect. C3: previous OTA image or USB reflash, with the legacy Pi clock as the ultimate fallback. Keep the old SD and board until two weeks of stable operation. |
 
 Hardware note (2026-10-24): the strip in use is WS2812, not WS2811B. Both use the same 800 kHz NZR protocol and the same 0.7 × VDD input threshold at 5 V, so the wiring, SPI encoding, and software are unchanged. The Adafruit BSS138 level shifter is not suitable for the data line: its 10 kΩ pull-ups produce roughly 1–2 µs edges, while a WS2812 bit is 1.25 µs and its high pulses are 0.4/0.8 µs. Use the 74AHCT125 or 74HCT245 from D3. The ESP32-C3 has the same 3.3 V logic and needs the same shifter; it drives the strip over SPI2 with DMA, not RMT (D19).
 
-Host note (2026-10-24): the Raspberry Pi Zero 2 W at `rpizero.local` (now `wordclock-dev`) is suitable for development and staging. The ESP32-C3-DevKit-RUST-1 is also on hand and is the second host candidate; both are evaluated by the D16 spike before production hardware is provisioned. Keep the 3B and the old SD as the rollback path.
+Host note (2026-10-24, decision 2026-11-03): the ESP32-C3-DevKit-RUST-1 is the selected host. The Raspberry Pi Zero 2 W at `rpizero.local` (now `wordclock-dev`) and the Pi 3B remain available as development and rollback hardware. Keep the 3B and the old SD as the rollback path.
 
 ## Non-negotiables
 
@@ -78,8 +78,8 @@ Useful legacy facts:
 3. Generate and verify the golden fixture before writing the clock renderer.
 4. Port the clock renderer and color pipeline against the fixture; do not touch wording.
 5. Build the terminal simulator and demo loop; use them for all development before touching hardware.
-6. Run the ESP32-C3 spike and record the host decision in `design.md` D16; do not provision either production host before this gate.
-7. Flash or wire only the selected host: Pi SD/SPI or C3 firmware/SPI-with-DMA. Run a minimal blink and the test pattern on the real strip.
+6. The ESP32-C3 spike is complete and the host decision is recorded in `design.md` D16; do not provision the Pi.
+7. Flash or wire only the selected host: the ESP32-C3 firmware over SPI-with-DMA. Run a minimal blink and the test pattern on the real strip.
 8. Record the physical order and the real pixel count, then implement the daemon or firmware, systemd/OTA release, and deployment for the selected host.
 9. Compare fixed-color frames with Fadecandy, run the 24-hour soak, reboot test, network-loss test, and rollback drill.
 10. Remove Fadecandy from the signal path only after the rollback path and two weeks of stability are confirmed.

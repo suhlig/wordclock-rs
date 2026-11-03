@@ -30,7 +30,7 @@ The host is not assumed. The clock core and simulator are built first; then a ti
 - `led-output`: writes a complete RGB frame to the WS2812 strip over the selected host's transport (SPI0 on the Pi, SPI2 with DMA on the ESP32-C3), including physical pixel count, padding, and refresh behavior.
 - `display-simulator`: renders the same frame to a terminal and runs the demo loop without hardware.
 - `clock-daemon`: runs continuously on the selected host, schedules minute updates, gates startup on time synchronization, logs, writes the shutdown pattern where an orderly stop exists, and shuts down or restarts cleanly.
-- `deployment`: builds and publishes the selected target's artifact and provisions either a 64-bit Pi with SPI and systemd or an ESP32-C3 with firmware, Wi-Fi credentials, and OTA.
+- `deployment`: builds and publishes the selected ESP32-C3 artifact and provisions firmware, Wi-Fi credentials, and OTA; the 64-bit Pi with SPI and systemd remains the fallback.
 
 ### Modified Capabilities
 

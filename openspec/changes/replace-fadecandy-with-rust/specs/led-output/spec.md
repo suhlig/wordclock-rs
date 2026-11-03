@@ -7,9 +7,9 @@ Delivers a complete color frame to the physical WS2812/WS2812B strip over the se
 ## ADDED Requirements
 
 ### Requirement: Host output transport
-The system SHALL drive the strip through the selected host's supported transport: SPI0 on the Raspberry Pi and SPI2 with DMA on the ESP32-C3. Both transports SHALL encode the same waveform from the four-bit cell defined in `src/strip.rs` — `0` as `1000` and `1` as `1100` at 2.5 MHz — and SHALL use the same pixel order and green-red-blue color order. The Pi SHALL NOT use a third-party encoder whose cell leaves a shorter gap after a `1` than the four-bit cell.
+The system SHALL drive the strip over SPI2 with DMA on the ESP32-C3, the selected host, encoding the four-bit cell defined in `src/strip.rs` — `0` as `1000` and `1` as `1100` at 2.5 MHz — and SHALL use the same pixel order and green-red-blue color order. The Raspberry Pi SPI0 path is the non-normative rollback and SHALL use the same cell if exercised. The Pi SHALL NOT use a third-party encoder whose cell leaves a shorter gap after a `1` than the four-bit cell.
 
-#### Scenario: Pi SPI output
+#### Scenario: Pi SPI output (fallback)
 - **WHEN** a frame is written on the Pi
 - **THEN** it is encoded with `strip::encode` and transmitted over SPI0 to `/dev/spidev0.0` as one pre-encoded buffer at 2.5 MHz
 

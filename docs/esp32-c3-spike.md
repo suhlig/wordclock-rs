@@ -119,7 +119,7 @@ The single 5 V decision (design D9 of `add-power-budget-and-current-sensing`) re
 
 ## 4.9 Decision
 
-Pending the measurements above. If the spike is inconclusive, the Pi 3B wins by default.
+**ESP32-C3 selected on 2026-11-03.** The measurements above, the SPI+DMA transport (D19), OTA with rollback, and the D20 outage check in 4.10 answer the gate. The Pi 3B stays only as the rollback path until the two-week stability window passes. The decision is conditional on the wall-location site survey and on the production firmware passing the full-chain, colour-comparison, soak, and rollback tests.
 
 ## 4.10 Outage check (D20)
 

@@ -2,13 +2,13 @@
 
 This is the physical build: a 288-pixel WS2812 word clock on a 300-LED strip, driven through a 74AHCT125 level shifter. Fadecandy is not in the signal path.
 
-Two hosts are candidates. The Raspberry Pi 3B drives the strip over SPI0; the ESP32-C3-DevKit-RUST-1 drives it over SPI2 with DMA, GPIO3 as MOSI. The level shifter, series resistor, capacitors, common ground, strip, and 5 V supply are common to both. The host is selected by the measured spike in design D16; this guide documents the Pi path in detail because it is the incumbent, and the C3 path is added after the decision.
+The ESP32-C3-DevKit-RUST-1 is the selected host (design D16) and drives the strip over SPI2 with DMA, GPIO3 as MOSI. The Raspberry Pi 3B over SPI0 is the rollback path. The level shifter, series resistor, capacitors, common ground, strip, and 5 V supply are common to both; this guide documents the shared wiring and the Pi fallback in detail, and the selected C3 firmware runbook is in `spike/esp32c3-ota/README.md`.
 
-The guide covers what to buy, how to wire it, how to enable the output, how to prove the build works, and how to roll back. The design rationale lives in `openspec/changes/replace-fadecandy-with-rust/design.md`, decisions D3, D16, and D17; this page is the build instruction.
+The guide covers what to buy, how to wire it, how to enable the output, how to prove the build works, and how to roll back. The design rationale lives in `openspec/changes/replace-fadecandy-with-rust/design.md`, decisions D3, D16, D17, and D19; this page is the build instruction.
 
 ## Bill of materials
 
-Reused from the Fadecandy build: Raspberry Pi 3B, MeanWell 5 V supply, 300-LED WS2812 strip, and the Fadecandy board (rollback path only). For the ESP32-C3 path, replace the Pi 3B, microSD card, and 1×40 header with the ESP32-C3-DevKit-RUST-1; the level shifter, passives, strip, and supply are unchanged.
+Reused from the Fadecandy build: MeanWell 5 V supply, 300-LED WS2812 strip, and the Fadecandy board (rollback path only). The selected build replaces the Pi 3B, microSD card, and 1×40 header with the ESP32-C3-DevKit-RUST-1; the Pi 3B remains the rollback host. The level shifter, passives, strip, and supply are unchanged.
 
 | Part | Qty | BerryBase SKU | Unit price |
 | :--- | ---: | :--- | ---: |
@@ -117,9 +117,9 @@ Do not wire CE0 (GPIO8, pin 24) or CE1 (GPIO7, pin 26). They are chip selects, t
 
 If SPI0 is ever unavailable, the fallback is SPI1 MOSI on GPIO20, physical pin 38, enabled with `dtoverlay=spi1-1cs` and used as `/dev/spidev1.0`. Avoid GPIO0 and GPIO1 (ID EEPROM) and GPIO14 and GPIO15 (serial console).
 
-## Enable SPI (Pi path)
+## Enable SPI (Pi fallback)
 
-On the ESP32-C3 path there is no Linux SPI device to enable; the SPI2 peripheral and its DMA channel are configured in firmware. The instructions below apply only when the Pi is selected.
+The selected ESP32-C3 needs no Linux SPI device; the SPI2 peripheral and its DMA channel are configured in firmware. The instructions below apply only to the Pi rollback path.
 
 Start from a fresh Raspberry Pi OS Lite 64-bit image.
 
@@ -149,9 +149,9 @@ Work through this list with the power off.
 
 Leave the Pi's own supply separate from the LED supply. Do not power the Pi from the LED rail without a protected 5 V path.
 
-## First light
+## First light (Pi fallback)
 
-Power the strip, then the Pi. With the daemon not yet running, verify with a short SPI run rather than by connecting a live data line by hand.
+The selected ESP32-C3 first light is in `docs/esp32-c3-spike.md` and `spike/esp32c3-ota/README.md`. For the Pi rollback path: power the strip, then the Pi. With the daemon not yet running, verify with a short SPI run rather than by connecting a live data line by hand.
 
 Expected results once the SPI output is working:
 
@@ -244,7 +244,7 @@ Extrapolated, and not measured: an all-white 335-pixel frame is 256,275 counts, 
 
 ## Rollback
 
-For the Pi path, keep the old SD card and Fadecandy board available as described below. For the ESP32-C3 path, keep the previous OTA image or a USB-reflashable release, and keep the legacy Pi/Fadecandy clock as the ultimate fallback until the stability window closes.
+For the selected ESP32-C3, keep the previous OTA image or a USB-reflashable release, and keep the legacy Pi/Fadecandy clock as the ultimate fallback until the stability window closes. For the Pi fallback, keep the old SD card and Fadecandy board available as described below.
 
 The old SD card and the Fadecandy board are the rollback path until the SPI build has passed the rollback drill and two weeks of stable operation.
 

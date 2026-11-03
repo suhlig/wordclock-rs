@@ -41,16 +41,18 @@ Run this gate after tasks 2 and 3 and before any hardware provisioning. The core
 - [x] 4.5 Implement the `Europe/Berlin` local-time and DST rule for the C3; compare it against `chrono-tz` on the host across the fixture and future transition dates through 2030.
 - [x] 4.6 Render the 06:30 fixture frame on the C3 and compare its indices and corrected colors with the host simulator.
 - [x] 4.7 Measure boot-to-first-frame time, frame time, RMT inter-chunk gaps, flash and RAM use with the timezone rule and OTA partitions, and Wi-Fi recovery time; record the numbers in `design.md` D16.
-- [ ] 4.8 Decide the host against the D16 criteria and record the choice and evidence in `design.md`; if the spike is inconclusive, keep the Pi.
+- [x] 4.8 Decided 2026-11-03: the ESP32-C3-DevKit-RUST-1 is the selected host. The evidence is in `design.md` D16 and `docs/esp32-c3-spike.md` 4.10. The Pi 3B remains the rollback path only.
 - [ ] 4.9 If the ESP32-C3 is selected, split the workspace into `wordclock-core` (`no_std` + `alloc`), `wordclock-host` (simulator, CLI, Pi daemon), and `wordclock-esp32` (firmware); if the Pi is selected, keep the single crate and the `hardware` feature.
 - [ ] 4.10 Port the SPI-with-DMA strip transport from `spike/esp32c3-ota` into the firmware backend and delete the RMT path, as decided in D19. Verify a full 300-pixel frame transmits with Wi-Fi active and that no pixel shows a value belonging to another position.
 - [ ] 4.11 Implement the start-up and outage behaviour decided in D20: stay dark until the first successful synchronization, never restore an unverified time, keep counting from the crystal-derived timer while the network is away, and blank once the last synchronization is older than the configured bound. Verify a power cycle with the access point switched off stays dark, and that a short outage keeps the correct minute.
 
 ## 5. Hardware spike and wiring verification (selected host)
 
-Execute only the path selected in task 4.8. Both paths require the 74AHCT125, 470 Ω series resistor, decoupling and bulk capacitors, and a common ground.
+Task 4.8 selected the ESP32-C3: execute 5B only. Section 5A is retained as the rollback path and is not executed. Both paths require the 74AHCT125, 470 Ω series resistor, decoupling and bulk capacitors, and a common ground.
 
-### 5A. Raspberry Pi path
+### 5A. Raspberry Pi path (non-normative fallback)
+
+Do not execute these tasks unless the ESP32-C3 decision is reopened.
 
 - [ ] 5A.1 Acquire the SN74AHCT125N (DIL-14), a 14-pin IC socket, a 470 Ω resistor, a 47 nF ceramic, a 1000 µF 16 V electrolytic, a 5×7 cm perfboard, Dupont leads and a 1×40 header, a Raspberry Pi Pico H for the sigrok-pico analyzer, and a new 32 GB or larger microSD card, in the single BerryBase order listed in `design.md`.
 - [ ] 5A.2 Flash a new SD card with Raspberry Pi OS Lite 64-bit (trixie); set hostname `wordclock`, user `suhlig`, SSH key, timezone Europe/Berlin, and German keyboard.
@@ -62,7 +64,7 @@ Execute only the path selected in task 4.8. Both paths require the 74AHCT125, 47
 - [ ] 5A.8 Measure frame time at 2.5 MHz and the nearest achievable clock, and confirm the four-bit cell's pulse widths with the sigrok-pico analyzer; keep the clock inside the datasheet window rather than the fastest clock that runs.
 - [ ] 5A.9 If SPI is unreliable, try a lower clock or another SPI mode, then document the fallback to an RP2040/ESP32 controller before considering Pi PWM/DMA.
 
-### 5B. ESP32-C3 path
+### 5B. ESP32-C3 path (selected)
 
 - [ ] 5B.1 Audit the BOM for the C3 path: ESP32-C3-DevKit-RUST-1, 74AHCT125, IC socket, 470 Ω, 47 nF, 1000 µF, perfboard, Dupont leads, 5 V supply, and the Pico H analyzer.
 - [ ] 5B.2 Choose a free, non-strapping header GPIO from the board schematic; wire it to 1A, 1Y through 470 Ω to strip DIN, 1OE to GND, VCC to LED 5 V, common ground, decoupling and bulk capacitors.
@@ -74,12 +76,14 @@ Execute only the path selected in task 4.8. Both paths require the 74AHCT125, 47
 
 ## 6. Daemon or firmware (selected host)
 
+Execute 6A and 6C. Section 6B is the Pi fallback and is not executed.
+
 ### 6A. Shared daemon logic
 
 - [ ] 6A.1 Implement the minute scheduler and per-minute color cadence behind the clock and display traits; test them on the host with a fake time source.
 - [ ] 6A.2 Implement the time-source gate behavior with a fake synchronized/unsynchronized source; test the neutral frame and the first synchronized frame.
 
-### 6B. Raspberry Pi daemon
+### 6B. Raspberry Pi daemon (non-normative fallback)
 
 - [ ] 6B.1 Implement the TOML configuration with logical pixels, physical strip length, SPI device and clock, gamma, whitepoint, timezone, birthday list, refresh interval, and NTP gate.
 - [ ] 6B.2 Implement the minute-boundary scheduler, including midnight rollover and daylight-saving transitions.
@@ -92,7 +96,7 @@ Execute only the path selected in task 4.8. Both paths require the 74AHCT125, 47
 - [ ] 6B.9 Add structured logging for startup, NTP waits, minute changes, color changes, and output errors; confirm journal visibility.
 - [ ] 6B.10 Add a test that SIGTERM produces exactly one shutdown frame, that it contains no word from the previous minute, that every logical pixel is 32,32,32, and that padding pixels stay black.
 
-### 6C. ESP32-C3 firmware
+### 6C. ESP32-C3 firmware (selected)
 
 - [ ] 6C.1 Choose `esp-hal` or `esp-idf-svc` from the spike results and pin the toolchain and crate versions.
 - [ ] 6C.2 Implement NVS/LittleFS configuration for strip length, GPIO, timezone, birthday list, refresh interval, and time-source gate; keep Wi-Fi credentials out of the repository.
@@ -105,7 +109,9 @@ Execute only the path selected in task 4.8. Both paths require the 74AHCT125, 47
 
 ## 7. Build and release (selected host)
 
-### 7A. Raspberry Pi
+Execute 7B. Section 7A is the Pi fallback and is not executed.
+
+### 7A. Raspberry Pi (non-normative fallback)
 
 - [ ] 7A.1 Add CI for `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test --all-targets` on default features.
 - [ ] 7A.2 Add an aarch64 `cross build --release --target aarch64-unknown-linux-gnu --features hardware` job and run the resulting binary on the Pi.
@@ -113,7 +119,7 @@ Execute only the path selected in task 4.8. Both paths require the 74AHCT125, 47
 - [ ] 7A.4 Add Dependabot for Cargo and GitHub Actions and pin the Rust toolchain.
 - [ ] 7A.5 Verify the release binary starts on the Pi and reports its version without the Ruby, Fadecandy, or OPC stack.
 
-### 7B. ESP32-C3
+### 7B. ESP32-C3 (selected)
 
 - [ ] 7B.1 Add CI for `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test --all-targets` on default features.
 - [ ] 7B.2 Build the `riscv32imc-unknown-none-elf` firmware with `espflash` and publish the image with its checksum.
@@ -123,7 +129,9 @@ Execute only the path selected in task 4.8. Both paths require the 74AHCT125, 47
 
 ## 8. Deployment and legacy removal (selected host)
 
-### 8A. Raspberry Pi
+Execute 8B. Section 8A is the Pi fallback and is not executed.
+
+### 8A. Raspberry Pi (non-normative fallback)
 
 - [ ] 8A.1 Add a `wordclock` Ansible role that installs the pinned release, verifies the checksum, creates the user and groups, installs the config and unit, and enables SPI.
 - [ ] 8A.2 Remove the `fadecandy` role, the `nerab.ruby` role, the `ansistrano` deployment, and the wordclock cron entries from `uhlig-it/infrastructure`.
@@ -131,7 +139,7 @@ Execute only the path selected in task 4.8. Both paths require the 74AHCT125, 47
 - [ ] 8A.4 Confirm `fcserver` is absent or disabled, no Ruby cron remains, and the host no longer needs Ruby.
 - [ ] 8A.5 Add a rollback section to the infrastructure docs that describes the card swap and Fadecandy reconnection.
 
-### 8B. ESP32-C3
+### 8B. ESP32-C3 (selected)
 
 - [ ] 8B.1 Document Wi-Fi credential provisioning and secrets handling; nothing secret goes into git.
 - [ ] 8B.2 Document the flash and OTA procedure, including checksum verification and the rollback image.
@@ -156,5 +164,5 @@ Execute only the path selected in task 4.8. Both paths require the 74AHCT125, 47
 - [x] 10.2 Write the hardware guide with the wiring diagram, BOM, output enablement, test-pattern procedure, and power/ground notes.
 - [ ] 10.3 Link the new repo to the legacy repo and the Fadecandy handoff; state that the legacy repo is the behavioral oracle.
 - [ ] 10.4 Record the verified physical mapping and pixel counts in the hardware guide.
-- [ ] 10.5 After the host decision, add the selected host's wiring, SPI setup, and OTA or Ansible procedure to the hardware guide; mark the other path as non-normative or remove it.
+- [ ] 10.5 Add the ESP32-C3 wiring, SPI setup, and OTA procedure to the hardware guide; keep the Pi path as the non-normative rollback.
 - [ ] 10.6 Create separate OpenSpec proposals for the deferred Reminders ideas, starting with the highest-value ones: smooth fade, night dimming, web/Prometheus/MQTT observability, and sensors.

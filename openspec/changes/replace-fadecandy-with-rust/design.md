@@ -262,7 +262,7 @@ The ESP32-C3 has no equivalent orderly stop. On power loss it cannot render a fi
 
 ### D16: Decide the host with a measured ESP32-C3 spike
 
-The host is chosen after the core and simulator exist, not before. Two candidates are carried through the plan: the incumbent Raspberry Pi 3B and the ESP32-C3-DevKit-RUST-1 that is already available. The gate runs after tasks 2 and 3 and before any hardware provisioning. The spike is time-boxed and answers the questions that paper cannot:
+The host is chosen after the core and simulator exist, not before. Two candidates were carried through the plan: the incumbent Raspberry Pi 3B and the ESP32-C3-DevKit-RUST-1 that was already available. The gate ran after tasks 2 and 3 and before any hardware provisioning. The spike answered the questions that paper could not:
 
 - Does RMT drive the real 288-pixel strip reliably through the 74AHCT125, with no visible gaps between RMT chunks? **Answered no on 2026-11-01, once the chain reached 335 pixels with Wi-Fi running; the transport was replaced with SPI and DMA, see D19.**
 - What is the boot-to-first-frame time, and how long is a full frame?
@@ -271,7 +271,9 @@ The host is chosen after the core and simulator exist, not before. Two candidate
 - How much flash and RAM remain after the timezone rule, Wi-Fi, and OTA partitions?
 - How much effort are flashing, OTA, and rollback compared with Ansible and a systemd unit?
 
-The comparison is recorded in this design and in `tasks.md`. The working audit, toolchain notes, and measurement log live in `docs/esp32-c3-spike.md`. If the spike is inconclusive, the Pi 3B wins by default: it is the incumbent and its rollback is already proven.
+The comparison is recorded in this design and in `tasks.md`. The working audit, toolchain notes, and measurement log live in `docs/esp32-c3-spike.md`.
+
+**Decision (2026-11-03): the ESP32-C3-DevKit-RUST-1 is the selected host.** The spike answered every gate question on the board: Wi-Fi/SNTP and reconnect, the DST rule against `chrono-tz`, byte-identical fixture parity, SPI2+DMA at 335 pixels with Wi-Fi active and no glitches, OTA with A/B rollback, one 5 V rail, and the full D20 sequence green → amber → dark → green with the clock matching the host after recovery. The Pi 3B is retained only as the rollback path until the two-week stability window passes; the Pi hardware, daemon, release, and deployment tasks are not executed. The decision is conditional on the wall-location site survey and on the production firmware passing the full-chain, colour-comparison, soak, and rollback tests. If the survey shows the wall cannot sustain 2.4 GHz Wi-Fi, the host choice is reopened.
 
 | Criterion | Raspberry Pi 3B | ESP32-C3-DevKit-RUST-1 |
 | :--- | :--- | :--- |
@@ -287,7 +289,7 @@ The comparison is recorded in this design and in `tasks.md`. The working audit, 
 | Power / size | higher / larger | lower / small |
 | Main risk | SD and OS maintenance | Wi-Fi, flash pressure, OTA |
 
-Measured on 2026-10-25 with the combined gate firmware (real core plus the `Europe/Berlin` rule, Wi-Fi/SNTP, a 288-pixel RMT frame, and an OTA partition table). The host choice itself is task 4.8.
+Measured on 2026-10-25 with the combined gate firmware (real core plus the `Europe/Berlin` rule, Wi-Fi/SNTP, a 288-pixel RMT frame, and an OTA partition table). This is the evidence behind the 2026-11-03 decision above.
 
 | Measurement | ESP32-C3-DevKit-RUST-1 |
 | :--- | :--- |
@@ -303,13 +305,13 @@ Measured on 2026-10-25 with the combined gate firmware (real core plus the `Euro
 | RAM | 54,432-byte heap peak of 103,184, plus a 27,656-byte static RMT buffer; the SPI build replaces that buffer with about 4 KiB |
 | Wi-Fi reconnect | 5.1 s including the 5 s backoff; association itself about 0.1 s |
 
-The RMT timing question was closed on 2026-10-25 and has since been reopened and settled the other way. That capture ran with `frame-loop`, which skips Wi-Fi, and the strip it drove was 288 pixels; it is the no-Wi-Fi control, not a production result. At 335 pixels with Wi-Fi running, RMT produced a few corrupted frames per sweep (D19). The transport is now SPI with DMA, which measured clean on a full 335-pixel walk; at the four-bit cell the wire time is about 11.5 ms for 288 pixels and 13.3 ms for 335, both trivial at a 1 Hz refresh. What remains outstanding for the host gate is the full 300-pixel frame on the real chain, the Fadecandy colour comparison, and a decision on start-up behaviour without a network (task 4.11). Note also that the wall installation has a single 5 V cable and no Ethernet drop, so the Pi's wired-network advantage does not exist here.
+The RMT timing question was closed on 2026-10-25 and has since been reopened and settled the other way. That capture ran with `frame-loop`, which skips Wi-Fi, and the strip it drove was 288 pixels; it is the no-Wi-Fi control, not a production result. At 335 pixels with Wi-Fi running, RMT produced a few corrupted frames per sweep (D19). The transport is now SPI with DMA, which measured clean on a full 335-pixel walk; at the four-bit cell the wire time is about 11.5 ms for 288 pixels and 13.3 ms for 335, both trivial at a 1 Hz refresh. What remains outstanding before cutover is the full 300-pixel frame on the real chain, the Fadecandy colour comparison, the wall-location site survey, and the production implementation of the D20 behaviour (task 4.11). Note also that the wall installation has a single 5 V cable and no Ethernet drop, so the Pi's wired-network advantage does not exist here.
 
 One criterion came off the list before the spike finished. A TLS stack and a certificate store were the constraints most likely to disqualify the C3, and D21 records that the control plane is plain MQTT on the LAN behind a Tailscale VPN, so neither has to fit. What remains a real constraint is RAM for concurrent connections and the discipline of never blocking, not the protocol.
 
 ### D17: ESP32-C3 output and time
 
-If the ESP32-C3 is selected, the output transport is SPI2 with DMA as decided in D19, with GPIO3 routed as MOSI. The data line still goes through the 74AHCT125 (or 74HCT245), the 470 Ω series resistor, and a common ground; the C3 is 3.3 V and the strip expects a 5 V-referenced data high. The firmware writes complete frames and must not depend on CPU service at any point during a transmission.
+The ESP32-C3 is the selected host, so the output transport is SPI2 with DMA as decided in D19, with GPIO3 routed as MOSI. The data line still goes through the 74AHCT125 (or 74HCT245), the 470 Ω series resistor, and a common ground; the C3 is 3.3 V and the strip expects a 5 V-referenced data high. The firmware writes complete frames and must not depend on CPU service at any point during a transmission.
 
 Time comes from Wi-Fi association and SNTP. The firmware gates the first frame on a successful synchronization, retries indefinitely if the network is unavailable, re-synchronizes periodically, and keeps the hardware watchdog fed. Only `Europe/Berlin` is required for v1; use a fixed offset plus the EU DST rule, or a filtered timezone database, and keep the full `chrono-tz` database out of the firmware unless the flash budget proves otherwise. Configuration (strip length, GPIO, timezone, birthdays, refresh interval, gate) lives in NVS/LittleFS or is compiled into the image; there is no TOML file and no systemd. Logging goes to USB serial/defmt during development and to a network log or OTA-readable buffer in production.
 
@@ -317,7 +319,7 @@ There is no orderly shutdown. Power loss leaves the last frame latched, and the 
 
 ### D18: ESP32-C3 lifecycle and deployment
 
-The spike also decides between `esp-hal` (bare-metal, `no_std`, smaller and deterministic) and `esp-idf-svc` (std, FreeRTOS, easier SNTP/OTA/logging but a larger binary and more C dependencies). Whichever wins, the firmware needs a hardware watchdog, a Wi-Fi reconnect state machine, periodic SNTP resync, a visible version string, and OTA with an A/B partition and rollback. Wi-Fi credentials are provisioned into NVS and are never committed to the repository. Deployment is a documented `espflash` command or an OTA upload with a checksum; there is no Ansible, no non-root service user, and no single-writer lock because the device runs one firmware image. Rollback is the previous OTA image or a USB reflash, with the legacy Pi/Fadecandy clock as the ultimate fallback.
+The spike settled on `esp-hal` with `esp-rtos`/`embassy` over `esp-idf-svc`: the firmware already builds on it, the image fits an OTA slot with room to spare, and it keeps the C dependencies out. Pin the toolchain and crate versions. The firmware needs a hardware watchdog, a Wi-Fi reconnect state machine, periodic SNTP resync, a visible version string, and OTA with an A/B partition and rollback. Wi-Fi credentials are provisioned into NVS and are never committed to the repository. Deployment is a documented `espflash` command or an OTA upload with a checksum; there is no Ansible, no non-root service user, and no single-writer lock because the device runs one firmware image. Rollback is the previous OTA image or a USB reflash, with the legacy Pi/Fadecandy clock as the ultimate fallback.
 
 ### D19: Drive the ESP32-C3 strip over SPI with DMA, not RMT
 

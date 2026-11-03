@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Runs the clock continuously on the selected host — the Pi or the ESP32-C3 — updating at minute boundaries, surviving reboots, time-source delays, and transient output errors, and making an orderly stop unmistakable where the host supports one.
+Runs the clock continuously on the selected ESP32-C3, with the Pi as the fallback, updating at minute boundaries, surviving reboots, time-source delays, and transient output errors, and making an orderly stop unmistakable where the host supports one. The ESP32-C3 was selected on 2026-11-03 (design D16); requirements and scenarios below that name the Pi describe the rollback path and are not exercised in the selected build.
 
 ## ADDED Requirements
 
